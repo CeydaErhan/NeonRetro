@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cosmetics | ElectroLite</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 text-slate-900">
+  <div class="min-h-screen">
+    <header class="border-b border-slate-200 bg-white">
+      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+        <a href="index.html" class="text-2xl font-semibold tracking-tight">ElectroLite</a>
+        <nav class="flex items-center gap-6 text-sm font-medium text-slate-600">
+          <a href="index.html">Electronics</a>
+          <a href="clothes.html">Clothing</a>
+          <a href="cosmetics.html" class="text-slate-900">Cosmetics</a>
+          <a href="cart.html" class="rounded-full bg-slate-900 px-4 py-2 text-white" data-track="nav-cart">Cart</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl px-6 py-12">
+      <section class="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p class="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Featured Cosmetics</p>
+          <h1 class="text-4xl font-semibold tracking-tight">Daily beauty essentials with a clean storefront style.</h1>
+        </div>
+        <p class="max-w-xl text-sm leading-6 text-slate-600">
+          A cosmetics category page for your demo marketplace with simple product cards and cart support.
+        </p>
+      </section>
+
+      <section id="cosmetics-grid" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"></section>
+    </main>
+  </div>
+
+  <script>
+    const cosmeticsProducts = [
+      { id: 201, name: 'Hydrating Face Cream', price: 29.99, image: 'https://picsum.photos/300/200?random=41' },
+      { id: 202, name: 'Soft Matte Lipstick', price: 18.99, image: 'https://picsum.photos/300/200?random=42' },
+      { id: 203, name: 'Vitamin C Serum', price: 34.99, image: 'https://picsum.photos/300/200?random=43' },
+      { id: 204, name: 'Gentle Cleanser', price: 21.99, image: 'https://picsum.photos/300/200?random=44' },
+      { id: 205, name: 'Perfume Mist', price: 39.99, image: 'https://picsum.photos/300/200?random=45' },
+      { id: 206, name: 'Body Lotion', price: 24.99, image: 'https://picsum.photos/300/200?random=46' }
+    ];
+
+    const cosmeticsGrid = document.getElementById('cosmetics-grid');
+
+    function getCart() {
+      return JSON.parse(localStorage.getItem('cart') || '[]');
+    }
+
+    function setCart(cart) {
+      localStorage.setItem('cart', JSON.stringify(cart));
+    }
+
+    function addToCart(productId) {
+      const product = cosmeticsProducts.find(item => item.id === productId);
+      if (!product) return;
+
+      const cart = getCart();
+      const existing = cart.find(item => item.id === product.id);
+
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cart.push({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          quantity: 1
+        });
+      }
+
+      setCart(cart);
+      alert(product.name + ' added to cart.');
+    }
+
+    function renderCosmeticsProducts() {
+      cosmeticsGrid.innerHTML = cosmeticsProducts.map(product => `
+        <article class="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
+          <img src="${product.image}" alt="${product.name}" class="h-52 w-full object-cover">
+          <div class="space-y-4 p-6">
+            <div class="space-y-2">
+              <h2 class="text-xl font-semibold">${product.name}</h2>
+              <p class="text-sm leading-6 text-slate-600">
+                Everyday cosmetic essentials with a clean and modern look.
+              </p>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-lg font-semibold">$${product.price.toFixed(2)}</span>
+              <button
+                type="button"
+                onclick="addToCart(${product.id})"
+                data-track="cosmetics-add-${product.id}"
+                class="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700"
+              >
+                Add to Cart
+              </button>
+            </div>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    renderCosmeticsProducts();
+  </script>
+
+  <script src="tracker.js"></script>
+  <script>initSession().then(trackPageview)</script>
+</body>
+</html>
