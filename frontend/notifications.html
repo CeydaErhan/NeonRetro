@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HESABIM | NEONRETRO</title>
+  <title>NOTIFICATIONS | NEONRETRO</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <style>
@@ -20,7 +20,7 @@
     .retro-btn-neon:hover { background: var(--neon-green); color: #000; box-shadow: 0 0 10px var(--neon-green); }
     .neon-input { background: #0A0A0F; border: 1px solid var(--neon-green); color: var(--neon-green); }
     .neon-input:focus { outline: none; box-shadow: 0 0 8px var(--neon-green); }
-    .neon-gradient { background: linear-gradient(135deg, #00FF88, #00D4FF); }
+    .notification-dot { width: 8px; height: 8px; background: var(--neon-green); border-radius: 50%; box-shadow: 0 0 5px var(--neon-green); }
   </style>
 </head>
 <body>
@@ -34,7 +34,7 @@
         <a href="index.html" class="text-xl font-black tracking-wider ml-1"><span style="color:#00FF88;text-shadow:0 0 5px #00FF88;">NEON</span><span style="color:#FF2D75;text-shadow:0 0 5px #FF2D75;">RETRO</span></a>
       </div>
       <div class="flex-1 max-w-md hidden md:block">
-        <div class="relative"><input type="text" id="search-input" placeholder="> ÜRÜN ARA..." class="w-full neon-input py-2 pl-4 pr-10 text-sm"><button id="search-btn" class="absolute right-3 top-1/2 text-[#00FF88]"><i class="fas fa-search"></i></button></div>
+        <div class="relative"><input type="text" id="search-input" placeholder="> SEARCH PRODUCTS..." class="w-full neon-input py-2 pl-4 pr-10 text-sm"><button id="search-btn" class="absolute right-3 top-1/2 text-[#00FF88]"><i class="fas fa-search"></i></button></div>
       </div>
       <div class="flex items-center gap-4 flex-shrink-0">
         <button id="mobile-search-btn" class="md:hidden text-xl retro-btn-neon px-2 py-1">🔍</button>
@@ -44,7 +44,7 @@
         <a href="account.html" class="text-xl retro-btn-neon px-2 py-1">👤</a>
       </div>
     </div>
-    <div id="mobile-search-bar" class="hidden md:hidden pb-3"><div class="relative"><input type="text" id="mobile-search-input" placeholder="> ARA..." class="w-full neon-input py-2 pl-4 pr-10 text-sm"><button id="mobile-search-close" class="absolute right-3 top-1/2 text-[#00FF88]">✕</button></div></div>
+    <div id="mobile-search-bar" class="hidden md:hidden pb-3"><div class="relative"><input type="text" id="mobile-search-input" placeholder="> SEARCH..." class="w-full neon-input py-2 pl-4 pr-10 text-sm"><button id="mobile-search-close" class="absolute right-3 top-1/2 text-[#00FF88]">✕</button></div></div>
   </div>
 </header>
 
@@ -63,17 +63,15 @@
   });
 </script>
 
-<main class="max-w-4xl mx-auto px-4 py-8">
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="neon-card rounded-lg p-4 h-fit">
-      <div class="text-center mb-4"><div class="w-20 h-20 rounded-full border-2 border-[#00FF88] mx-auto flex items-center justify-center text-3xl text-[#00FF88]">👤</div><h3 class="font-bold mt-2 text-[#00FF88]">NEON_USER</h3><p class="text-xs text-[#00D4FF]">cyber@neonretro.com</p></div>
-      <div class="border-t border-[#00FF88] pt-3 space-y-1"><a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#00FF88] hover:bg-[#00FF8811]"><i class="fas fa-user w-5"></i> PROFİL</a><a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#00FF88] hover:bg-[#00FF8811]"><i class="fas fa-box w-5"></i> SİPARİŞLER</a><a href="favorites.html" class="flex items-center gap-3 px-3 py-2 rounded-lg text-[#FF2D75] hover:bg-[#FF2D7511]"><i class="fas fa-heart w-5"></i> FAVORİLER</a><a href="#" class="flex items-center gap-3 px-3 py-2 rounded-lg text-red-500 hover:bg-red-500/10"><i class="fas fa-sign-out-alt w-5"></i> ÇIKIŞ</a></div>
+<main class="max-w-2xl mx-auto px-4 py-8">
+  <div class="neon-card rounded-lg overflow-hidden">
+    <div class="divide-y divide-[#00FF88]">
+      <div class="flex items-start gap-4 p-5 hover:bg-[#00FF8811] transition cursor-pointer"><div class="w-10 h-10 rounded-full border border-[#00FF88] flex items-center justify-center flex-shrink-0 text-[#00FF88]"><i class="fas fa-tag"></i></div><div class="flex-1"><p class="font-bold text-[#00FF88]">🎉 SUPER SALE DAYS!</p><p class="text-sm text-[#00D4FF] mt-1">Up to 30% off across all categories. Valid for 3 days.</p><span class="text-xs text-[#00FF88]/60 mt-2 block">2 hours ago</span></div><div class="notification-dot mt-2"></div></div>
+      <div class="flex items-start gap-4 p-5 hover:bg-[#00FF8811] transition cursor-pointer"><div class="w-10 h-10 rounded-full border border-[#FF2D75] flex items-center justify-center flex-shrink-0 text-[#FF2D75]"><i class="fas fa-truck"></i></div><div class="flex-1"><p class="font-bold text-[#FF2D75]">🚚 YOUR ORDER IS ON THE WAY!</p><p class="text-sm text-[#00D4FF] mt-1">Your order has been shipped. Tracking: NEO-123456</p><span class="text-xs text-[#00FF88]/60 mt-2 block">1 day ago</span></div><div class="notification-dot mt-2"></div></div>
+      <div class="flex items-start gap-4 p-5 hover:bg-[#00FF8811] transition cursor-pointer"><div class="w-10 h-10 rounded-full border border-[#00D4FF] flex items-center justify-center flex-shrink-0 text-[#00D4FF]"><i class="fas fa-gift"></i></div><div class="flex-1"><p class="font-bold text-[#00D4FF]">🎁 WELCOME BONUS!</p><p class="text-sm text-[#00D4FF] mt-1">50 points welcome bonus has been added to your account.</p><span class="text-xs text-[#00FF88]/60 mt-2 block">3 days ago</span></div></div>
+      <div class="flex items-start gap-4 p-5 hover:bg-[#00FF8811] transition cursor-pointer"><div class="w-10 h-10 rounded-full border border-[#00FF88] flex items-center justify-center flex-shrink-0 text-[#00FF88]"><i class="fas fa-star"></i></div><div class="flex-1"><p class="font-bold text-[#00FF88]">⭐ REVIEW & EARN!</p><p class="text-sm text-[#00D4FF] mt-1">Leave a review for your purchase and earn 20 points!</p><span class="text-xs text-[#00FF88]/60 mt-2 block">5 days ago</span></div></div>
     </div>
-    <div class="md:col-span-2 space-y-6">
-      <div class="neon-card rounded-lg p-6"><h2 class="font-bold mb-4 text-[#00FF88]">⚡ PROFİL BİLGİLERİ</h2><div class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label class="text-xs text-[#00D4FF]">AD SOYAD</label><p class="text-sm font-bold text-[#00FF88]">NEON_USER</p></div><div><label class="text-xs text-[#00D4FF]">E-POSTA</label><p class="text-sm font-bold text-[#00FF88]">cyber@neonretro.com</p></div><div><label class="text-xs text-[#00D4FF]">TELEFON</label><p class="text-sm font-bold text-[#00FF88]">+90 555 123 45 67</p></div><div><label class="text-xs text-[#00D4FF]">ÜYELİK</label><p class="text-sm font-bold text-[#00FF88]">01.01.2084</p></div></div><button class="mt-4 text-sm retro-btn-neon px-4 py-1">DÜZENLE →</button></div>
-      <div class="neon-gradient rounded-lg p-6 text-black"><div class="flex justify-between items-center"><div><p class="text-sm opacity-90">💎 PUAN BAKİYESİ</p><p class="text-3xl font-black">250 ₺</p><p class="text-xs opacity-80 mt-1">Harcamaya hazır</p></div><i class="fas fa-coins text-4xl opacity-70"></i></div></div>
-      <div class="neon-card rounded-lg p-6"><div class="flex justify-between items-center mb-4"><h2 class="font-bold text-[#00FF88]">📦 SON SİPARİŞLER</h2><a href="#" class="text-xs text-[#00D4FF]">TÜMÜ →</a></div><div class="space-y-3"><div class="flex justify-between items-center p-3 border border-[#00FF88] rounded-lg"><div><p class="text-sm font-bold text-[#00FF88]">Kablosuz Kulaklık</p><p class="text-xs text-[#00D4FF]">Sipariş: #NEO-12345</p></div><div class="text-right"><p class="text-sm font-bold text-[#FF2D75]">₺799</p><p class="text-xs text-[#00FF88]">TESLİM EDİLDİ</p></div></div><div class="flex justify-between items-center p-3 border border-[#00FF88] rounded-lg"><div><p class="text-sm font-bold text-[#00FF88]">Mekanik Klavye</p><p class="text-xs text-[#00D4FF]">Sipariş: #NEO-12346</p></div><div class="text-right"><p class="text-sm font-bold text-[#FF2D75]">₺1.299</p><p class="text-xs text-[#00D4FF]">KARGODA</p></div></div></div></div>
-    </div>
+    <div class="p-4 text-center border-t border-[#00FF88]"><button class="text-sm retro-btn-neon px-4 py-1">🗑 CLEAR ALL</button></div>
   </div>
 </main>
 
@@ -84,7 +82,7 @@
       <!-- Logo & Sosyal Medya -->
       <div>
         <h3 class="text-xl font-black tracking-wider"><span style="color:#00FF88;text-shadow:0 0 5px #00FF88;">NEON</span><span style="color:#FF2D75;text-shadow:0 0 5px #FF2D75;">RETRO</span></h3>
-        <p class="text-[10px] text-[#00FF88]/70 mt-2 font-mono">⚡ 2026'nın alışveriş devrimi<br>🎮 Retro ruhu, neon gelecek</p>
+        <p class="text-[10px] text-[#00FF88]/70 mt-2 font-mono">⚡ The shopping revolution of 2026<br>🎮 Retro soul, neon future</p>
         <div class="flex gap-3 mt-4">
           <a href="https://instagram.com" target="_blank" class="w-8 h-8 flex items-center justify-center border border-[#00FF88] text-[#00FF88] hover:bg-[#00FF88] hover:text-black transition"><i class="fab fa-instagram text-sm"></i></a>
           <a href="https://twitter.com" target="_blank" class="w-8 h-8 flex items-center justify-center border border-[#00FF88] text-[#00FF88] hover:bg-[#00FF88] hover:text-black transition"><i class="fab fa-twitter text-sm"></i></a>
@@ -93,50 +91,50 @@
         </div>
       </div>
       
-      <!-- ALIŞVERİŞ -->
+      <!-- SHOPPING -->
       <div>
-        <h4 class="font-bold text-sm mb-3" style="color:#00D4FF;text-shadow:0 0 3px #00D4FF;">🛍 ALIŞVERİŞ</h4>
+        <h4 class="font-bold text-sm mb-3" style="color:#00D4FF;text-shadow:0 0 3px #00D4FF;">🛍 SHOPPING</h4>
         <ul class="space-y-2 text-[11px] font-mono">
-          <li><a href="offers.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🔥 Çok Satanlar</a></li>
-          <li><a href="new-arrivals.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">✨ Yeni Ürünler</a></li>
-          <li><a href="offers.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🏷 İndirimdekiler</a></li>
-          <li><a href="offers.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🎁 Kampanyalar</a></li>
+          <li><a href="offers.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🔥 Best Sellers</a></li>
+          <li><a href="new-arrivals.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">✨ New Arrivals</a></li>
+          <li><a href="offers.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🏷 Deals</a></li>
+          <li><a href="offers.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🎁 Campaigns</a></li>
         </ul>
       </div>
       
       <!-- YARDIM -->
       <div>
-        <h4 class="font-bold text-sm mb-3" style="color:#00D4FF;text-shadow:0 0 3px #00D4FF;">🛠 YARDIM</h4>
+        <h4 class="font-bold text-sm mb-3" style="color:#00D4FF;text-shadow:0 0 3px #00D4FF;">🛠 HELP</h4>
         <ul class="space-y-2 text-[11px] font-mono">
-          <li><a href="orders.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">📦 Sipariş Takibi</a></li>
-          <li><a href="contact.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🔄 İade ve Değişim</a></li>
-          <li><a href="faq.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">❓ Sık Sorulan Sorular</a></li>
-          <li><a href="contact.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">📞 İletişim</a></li>
+          <li><a href="orders.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">📦 Order Tracking</a></li>
+          <li><a href="contact.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">🔄 Returns & Exchanges</a></li>
+          <li><a href="faq.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">❓ FAQ</a></li>
+          <li><a href="contact.html" class="text-[#00FF88]/70 hover:text-[#00FF88] transition">📞 Contact</a></li>
         </ul>
       </div>
       
-      <!-- İletişim & E-Bülten -->
+      <!-- Contact & Newsletter -->
       <div>
-        <h4 class="font-bold text-sm mb-3" style="color:#00D4FF;text-shadow:0 0 3px #00D4FF;">📡 BİZE ULAŞIN</h4>
+        <h4 class="font-bold text-sm mb-3" style="color:#00D4FF;text-shadow:0 0 3px #00D4FF;">📡 CONTACT US</h4>
         <ul class="space-y-2 text-[11px] font-mono text-[#00FF88]/70 mb-4">
           <li><i class="fas fa-envelope w-5 text-[#00FF88]"></i> <a href="mailto:cyber@neonretro.com" class="hover:text-[#00FF88]">cyber@neonretro.com</a></li>
           <li><i class="fas fa-phone w-5 text-[#00FF88]"></i> <a href="tel:+902421234567" class="hover:text-[#00FF88]">+90 242 123 4567</a></li>
-          <li><i class="fas fa-map-marker-alt w-5 text-[#00FF88]"></i> Antalya / Türkiye</li>
+          <li><i class="fas fa-map-marker-alt w-5 text-[#00FF88]"></i> Antalya / Turkey</li>
         </ul>
         <div class="flex gap-2">
-          <input type="email" placeholder="> E-posta adresiniz" class="flex-1 text-[10px] font-mono bg-[#0A0A0F] border border-[#00FF88] px-3 py-2 text-[#00FF88] placeholder:text-[#00FF88]/40 focus:outline-none focus:shadow-[0_0_8px_#00FF88]">
-          <button class="px-3 py-2 retro-btn-neon text-[10px]" onclick="subscribeNewsletter()">ABONE</button>
+          <input type="email" placeholder="> Your email address" class="flex-1 text-[10px] font-mono bg-[#0A0A0F] border border-[#00FF88] px-3 py-2 text-[#00FF88] placeholder:text-[#00FF88]/40 focus:outline-none focus:shadow-[0_0_8px_#00FF88]">
+          <button class="px-3 py-2 retro-btn-neon text-[10px]" onclick="subscribeNewsletter()">SUBSCRIBE</button>
         </div>
       </div>
     </div>
     
-    <!-- Alt Çizgi & Copyright -->
+    <!-- Bottom Line & Copyright -->
     <div class="border-t border-[#00FF88]/30 mt-8 pt-6 text-center text-[9px] font-mono text-[#00FF88]/50">
-      <p>© 2026 NEONRETRO | SİYAH NEON EDITION | TÜM SİSTEMLER AKTİF</p>
+      <p>© 2026 NEONRETRO | BLACK NEON EDITION | ALL SYSTEMS ACTIVE</p>
       <div class="flex justify-center gap-4 mt-2">
-        <a href="about.html" class="hover:text-[#00FF88] transition">KVKK</a>
-        <a href="about.html" class="hover:text-[#00FF88] transition">ÇEREZ POLİTİKASI</a>
-        <a href="about.html" class="hover:text-[#00FF88] transition">KULLANIM KOŞULLARI</a>
+        <a href="about.html" class="hover:text-[#00FF88] transition">PRIVACY POLICY</a>
+        <a href="about.html" class="hover:text-[#00FF88] transition">COOKIE POLICY</a>
+        <a href="about.html" class="hover:text-[#00FF88] transition">TERMS OF USE</a>
       </div>
     </div>
   </div>
