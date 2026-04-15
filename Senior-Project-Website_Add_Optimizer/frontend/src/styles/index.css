@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global base styles for the dashboard look and readability. */
+:root {
+  color: #0f172a;
+  background-color: #f1f5f9;
+  font-family: "Manrope", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Ensures smooth text rendering and consistent page height. */
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+/* Provides subtle gradient backdrop for content surface. */
+body {
+  margin: 0;
+  background-image: radial-gradient(circle at top right, #e2e8f0 0%, #f8fafc 45%);
+}
