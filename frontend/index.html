@@ -366,7 +366,7 @@
 
     // ========== DATA LOADING ==========
     async function fetchProducts() {
-      const response = await fetch('data/products.json');
+      const response = await fetch('data/products_updated.json');
       const products = await response.json();
       allProducts.splice(0, allProducts.length, ...products);
     }

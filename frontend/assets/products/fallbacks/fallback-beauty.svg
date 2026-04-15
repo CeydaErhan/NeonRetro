@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#1f0b16"/>
+  <rect x="154" y="70" width="92" height="64" rx="14" fill="#ffd3e3"/>
+  <rect x="130" y="128" width="140" height="182" rx="24" fill="#ff6fa7" stroke="#fff0f5" stroke-width="8"/>
+  <path d="M170 110h60" stroke="#a3124d" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="200" cy="214" r="34" fill="#fff2f7"/>
+  <text x="200" y="346" fill="#fff0f5" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Beauty</text>
+</svg>

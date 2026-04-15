@@ -102,7 +102,7 @@
   async function loadCategory() {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get('cat');
-    const response = await fetch('data/products.json');
+      const response = await fetch('data/products_updated.json');
     const allProducts = await response.json();
     const filtered = allProducts.filter(p => p.category === cat);
     document.getElementById('category-title').innerHTML = `📂 ${catDisplay[cat] || 'Category'}`;

@@ -1,13 +1,17 @@
 """FastAPI application entrypoint."""
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from dotenv import load_dotenv
 
 from app.database import Base, engine
 from app.routers import ads, analytics, auth, campaigns, events, recommendations, visitor_sessions
+
+load_dotenv()
 
 
 @asynccontextmanager
@@ -25,13 +29,20 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     """Create the FastAPI app with middleware and routers."""
+    cors_allow_origins = os.getenv("CORS_ALLOW_ORIGINS", "")
+    allow_origins = [origin.strip() for origin in cors_allow_origins.split(",") if origin.strip()]
+    if not allow_origins:
+        allow_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+
     app = FastAPI(title="Website & Advertisement Optimizer API", version="1.0.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
-allow_origins=[
-    "https://simple-test-website-orcin.vercel.app",
-    "https://project-189r3.vercel.app"
-],
+        allow_origins=allow_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
