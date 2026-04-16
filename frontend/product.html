@@ -21,6 +21,23 @@
     .retro-btn-neon:hover { background: var(--neon-green); color: #000; box-shadow: 0 0 10px var(--neon-green); }
     .neon-input { background: #0A0A0F; border: 1px solid var(--neon-green); color: var(--neon-green); }
     .neon-input:focus { outline: none; box-shadow: 0 0 8px var(--neon-green); }
+    #product-main-image {
+      transition: opacity 0.15s ease, filter 0.3s ease;
+    }
+    #product-main-image[data-color="black"]       { filter: brightness(0.3) contrast(1.2); }
+    #product-main-image[data-color="white"]       { filter: brightness(1.5) grayscale(0.2); }
+    #product-main-image[data-color="silver"]      { filter: grayscale(0.6) brightness(1.3); }
+    #product-main-image[data-color="gold"]        { filter: sepia(0.8) saturate(1.6) brightness(1.1); }
+    #product-main-image[data-color="space-black"] { filter: brightness(0.2) contrast(1.3); }
+    #product-main-image[data-color="deep-purple"] { filter: hue-rotate(260deg) saturate(1.4) brightness(0.8); }
+    #product-main-image[data-color="navy"]        { filter: hue-rotate(210deg) saturate(1.5) brightness(0.6); }
+    #product-main-image[data-color="grey"]        { filter: grayscale(1) brightness(1.1); }
+    #product-main-image[data-color="gray"]        { filter: grayscale(1) brightness(1.1); }
+    #product-main-image[data-color="beige"]       { filter: sepia(0.4) saturate(0.8) brightness(1.2); }
+    #product-main-image[data-color="olive"]       { filter: hue-rotate(60deg) saturate(0.8) brightness(0.7); }
+    #product-main-image[data-color="red"]         { filter: hue-rotate(340deg) saturate(2) brightness(0.9); }
+    #product-main-image[data-color="blue"]        { filter: hue-rotate(200deg) saturate(1.5) brightness(0.9); }
+    #product-main-image[data-color="green"]       { filter: hue-rotate(100deg) saturate(1.3) brightness(0.8); }
   </style>
 </head>
 <body>
@@ -130,10 +147,33 @@
           item.classList.remove('bg-cyan-500','text-black','font-bold');
         });
         button.classList.add('bg-cyan-500','text-black','font-bold');
+        // Update product image on color change
+        if(group === 'colors'){
+          const img = document.getElementById('product-main-image');
+          if(img){
+            const strategy = img.dataset.strategy;
+            const colorKey = value.toLowerCase().replace(/\s+/g, '-');
+            
+            if(strategy === 'per-color'){
+              // Clothing: change actual image src
+              const variantUrl = window.__currentProduct?.variantImages?.color?.[colorKey];
+              if(variantUrl){
+                img.style.opacity = '0';
+                setTimeout(()=>{
+                  img.src = variantUrl;
+                  img.style.opacity = '1';
+                }, 150);
+              }
+            } else if(strategy === 'css-filter'){
+              // Electronics, Sports, Home Appliances: apply CSS filter
+              img.dataset.color = colorKey;
+            }
+          }
+        }
       });
     });
   }
-  async function loadProduct(){const response=await fetch('data/products.json');const allProducts=await response.json();const urlParams=new URLSearchParams(window.location.search);const id=urlParams.get('id');if(!id){window.location.href='index.html';return;}const p=allProducts.find(p=>p.id==id);if(!p){document.getElementById('product-detail').innerHTML='<div class="p-8 text-center text-[#FF2D75]">❌ PRODUCT NOT FOUND</div>';return;}Object.keys(selectedAttributes).forEach(key=>delete selectedAttributes[key]);const disc=p.discount>0;const final=disc?(p.price*(1-p.discount/100)).toFixed(2):p.price.toFixed(2);const stockStatus=p.stock>10?'✅ IN STOCK':(p.stock>0?`⚠️ ONLY ${p.stock} LEFT!`:'❌ OUT OF STOCK');const stockColor=p.stock>10?'text-[#00FF88]':(p.stock>0?'text-[#FF2D75]':'text-red-500');const attributeSelectors=buildAttributeSelectors(p.attributes||{});document.getElementById('product-detail').innerHTML=`<div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6"><div class="relative"><img src="${p.image}" class="w-full rounded-lg border border-[#00FF88]">${disc?`<span class="absolute top-4 left-4 bg-[#FF2D75] text-black text-sm font-bold px-3 py-1 border border-black">-%${p.discount}</span>`:''}</div><div><div class="flex items-center gap-2 mb-2"><span class="text-xs text-[#00D4FF] border border-[#00D4FF] px-2 py-1 rounded">${p.categoryName}</span><span class="text-xs text-[#00FF88]">⭐ ${p.rating} (${p.salesCount})</span></div><h1 class="text-2xl font-bold text-[#00FF88]">${p.name}</h1><p class="text-[#00D4FF] mt-4 leading-relaxed">${p.description}</p><div class="mt-6"><div class="flex items-baseline gap-3"><span class="text-3xl font-bold text-[#FF2D75]">$${final}</span>${disc?`<span class="text-sm line-through text-gray-500">$${p.price}</span>`:''}</div><p class="text-sm ${stockColor} mt-2">${stockStatus}</p></div>${attributeSelectors}<div class="flex gap-3 mt-8"><button id="add-to-cart-btn" class="flex-1 retro-btn-neon py-3"><i class="fas fa-cart-plus mr-2"></i> ADD TO CART</button><button onclick="toggleFavorite(${p.id})" class="favorite-btn w-12 h-12 retro-btn-neon flex items-center justify-center">${isFavorite(p.id)?'<i class="fas fa-heart text-[#FF2D75] text-xl"></i>':'<i class="far fa-heart text-xl"></i>'}</button></div><div class="border-t border-[#00FF88] mt-6 pt-6 grid grid-cols-2 gap-3 text-sm"><div class="text-[#00FF88]"><i class="fas fa-truck mr-2"></i> FREE SHIPPING</div><div class="text-[#00FF88]"><i class="fas fa-undo-alt mr-2"></i> 30-DAY RETURNS</div><div class="text-[#00FF88]"><i class="fas fa-shield-alt mr-2"></i> GUARANTEED</div><div class="text-[#00FF88]"><i class="fas fa-headset mr-2"></i> 24/7 SUPPORT</div></div></div></div>`;bindAttributeSelectors();document.getElementById('add-to-cart-btn')?.addEventListener('click',()=>addToCart(p));const similar=allProducts.filter(s=>s.category===p.category&&s.id!==p.id).slice(0,4);document.getElementById('similar-products').innerHTML=similar.map(s=>`<div onclick="location.href='product.html?id=${s.id}'" class="neon-card rounded-lg p-3"><img src="${s.image}" class="w-full h-32 object-cover rounded-lg border border-[#00FF88]"><h3 class="font-bold text-xs mt-2 text-[#00FF88] truncate">${s.name}</h3><p class="text-sm font-bold text-[#FF2D75]">$${s.price.toFixed(2)}</p></div>`).join('');}
+  async function loadProduct(){const response=await fetch('data/products_updated.json');const allProducts=await response.json();const urlParams=new URLSearchParams(window.location.search);const id=urlParams.get('id');if(!id){window.location.href='index.html';return;}const p=allProducts.find(p=>p.id==id);window.__currentProduct = p;if(!p){document.getElementById('product-detail').innerHTML='<div class="p-8 text-center text-[#FF2D75]">❌ PRODUCT NOT FOUND</div>';return;}Object.keys(selectedAttributes).forEach(key=>delete selectedAttributes[key]);const disc=p.discount>0;const final=disc?(p.price*(1-p.discount/100)).toFixed(2):p.price.toFixed(2);const stockStatus=p.stock>10?'✅ IN STOCK':(p.stock>0?`⚠️ ONLY ${p.stock} LEFT!`:'❌ OUT OF STOCK');const stockColor=p.stock>10?'text-[#00FF88]':(p.stock>0?'text-[#FF2D75]':'text-red-500');const attributeSelectors=buildAttributeSelectors(p.attributes||{});document.getElementById('product-detail').innerHTML=`<div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6"><div class="relative"><img id="product-main-image" src="${p.defaultImage || p.image}" data-strategy="${p.imageStrategy || 'single'}" data-color="" class="w-full rounded-lg border border-[#00FF88] transition-all duration-300">${disc?`<span class="absolute top-4 left-4 bg-[#FF2D75] text-black text-sm font-bold px-3 py-1 border border-black">-%${p.discount}</span>`:''}</div><div><div class="flex items-center gap-2 mb-2"><span class="text-xs text-[#00D4FF] border border-[#00D4FF] px-2 py-1 rounded">${p.categoryName}</span><span class="text-xs text-[#00FF88]">⭐ ${p.rating} (${p.salesCount})</span></div><h1 class="text-2xl font-bold text-[#00FF88]">${p.name}</h1><p class="text-[#00D4FF] mt-4 leading-relaxed">${p.description}</p><div class="mt-6"><div class="flex items-baseline gap-3"><span class="text-3xl font-bold text-[#FF2D75]">$${final}</span>${disc?`<span class="text-sm line-through text-gray-500">$${p.price}</span>`:''}</div><p class="text-sm ${stockColor} mt-2">${stockStatus}</p></div>${attributeSelectors}<div class="flex gap-3 mt-8"><button id="add-to-cart-btn" class="flex-1 retro-btn-neon py-3"><i class="fas fa-cart-plus mr-2"></i> ADD TO CART</button><button onclick="toggleFavorite(${p.id})" class="favorite-btn w-12 h-12 retro-btn-neon flex items-center justify-center">${isFavorite(p.id)?'<i class="fas fa-heart text-[#FF2D75] text-xl"></i>':'<i class="far fa-heart text-xl"></i>'}</button></div><div class="border-t border-[#00FF88] mt-6 pt-6 grid grid-cols-2 gap-3 text-sm"><div class="text-[#00FF88]"><i class="fas fa-truck mr-2"></i> FREE SHIPPING</div><div class="text-[#00FF88]"><i class="fas fa-undo-alt mr-2"></i> 30-DAY RETURNS</div><div class="text-[#00FF88]"><i class="fas fa-shield-alt mr-2"></i> GUARANTEED</div><div class="text-[#00FF88]"><i class="fas fa-headset mr-2"></i> 24/7 SUPPORT</div></div></div></div>`;bindAttributeSelectors();document.getElementById('add-to-cart-btn')?.addEventListener('click',()=>addToCart(p));const similar=allProducts.filter(s=>s.category===p.category&&s.id!==p.id).slice(0,4);document.getElementById('similar-products').innerHTML=similar.map(s=>`<div onclick="location.href='product.html?id=${s.id}'" class="neon-card rounded-lg p-3"><img src="${s.image}" class="w-full h-32 object-cover rounded-lg border border-[#00FF88]"><h3 class="font-bold text-xs mt-2 text-[#00FF88] truncate">${s.name}</h3><p class="text-sm font-bold text-[#FF2D75]">$${s.price.toFixed(2)}</p></div>`).join('');}
   document.addEventListener('DOMContentLoaded',()=>{loadProduct();saveCart(getCart());});
 </script>
 

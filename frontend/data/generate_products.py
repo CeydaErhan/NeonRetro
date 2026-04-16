@@ -1,6 +1,11 @@
 import csv
+import hashlib
 import json
 import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 from pathlib import Path
 
@@ -14,13 +19,101 @@ CATEGORY_MAP = {
     "Sports": ("sports", "Sports"),
 }
 
-CATEGORY_SEEDS = {
-    "electronics": "tech",
-    "clothing": "fashion",
-    "beauty": "beauty",
-    "home-appliances": "home",
-    "books": "books",
-    "sports": "sport",
+CATEGORY_HINTS = {
+    "electronics": ["device", "gadget", "tech"],
+    "clothing": ["apparel", "fashion", "wear"],
+    "beauty": ["cosmetic", "skincare", "makeup"],
+    "home-appliances": ["appliance", "home", "kitchen"],
+    "books": ["book", "novel", "cover"],
+    "sports": ["fitness", "sport", "gear"],
+}
+
+COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
+OPENVERSE_API_URL = "https://api.openverse.org/v1/images/"
+IMAGE_CACHE_VERSION = 5
+IMAGE_CACHE_FILENAME = "product_image_cache.json"
+PRODUCT_IMAGE_DIR = "assets/products"
+FALLBACK_DIR = "fallbacks"
+MIN_MATCH_SCORE = 6.0
+MAX_SEARCH_RESULTS = 8
+REQUEST_TIMEOUT_SECONDS = 8
+SEARCH_MIN_INTERVAL_SECONDS = 1.0
+SEARCH_RETRY_DELAYS_SECONDS = (2.0, 5.0, 10.0)
+
+STOPWORDS = {
+    "and",
+    "edition",
+    "for",
+    "kit",
+    "new",
+    "set",
+    "the",
+    "with",
+}
+
+BANNED_IMAGE_TOKENS = {
+    "advertisement",
+    "banner",
+    "diagram",
+    "drawing",
+    "icon",
+    "illustration",
+    "label",
+    "logo",
+    "poster",
+    "symbol",
+    "vector",
+}
+
+GENERIC_BRANDS = {"Generic", "Unknown Author"}
+
+FALLBACK_SVGS = {
+    "electronics": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#08121f"/>
+  <rect x="44" y="44" width="312" height="312" rx="36" fill="#0d1d31" stroke="#00d4ff" stroke-width="8"/>
+  <rect x="104" y="90" width="192" height="220" rx="24" fill="#09111b" stroke="#00ff88" stroke-width="8"/>
+  <circle cx="200" cy="280" r="12" fill="#00ff88"/>
+  <text x="200" y="340" fill="#e5f7ff" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Electronics</text>
+</svg>
+""",
+    "clothing": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#1d1020"/>
+  <path d="M140 76l28 36h64l28-36 52 36-34 52-34-18v150H156V146l-34 18-34-52z" fill="#ff2d75" stroke="#ffd6e7" stroke-width="8" stroke-linejoin="round"/>
+  <text x="200" y="342" fill="#ffe7ef" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Clothing</text>
+</svg>
+""",
+    "beauty": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#1f0b16"/>
+  <rect x="154" y="70" width="92" height="64" rx="14" fill="#ffd3e3"/>
+  <rect x="130" y="128" width="140" height="182" rx="24" fill="#ff6fa7" stroke="#fff0f5" stroke-width="8"/>
+  <path d="M170 110h60" stroke="#a3124d" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="200" cy="214" r="34" fill="#fff2f7"/>
+  <text x="200" y="346" fill="#fff0f5" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Beauty</text>
+</svg>
+""",
+    "home-appliances": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#101820"/>
+  <rect x="108" y="64" width="184" height="256" rx="24" fill="#e9eef2" stroke="#5d6d7e" stroke-width="8"/>
+  <circle cx="200" cy="200" r="52" fill="#b8c4cf" stroke="#5d6d7e" stroke-width="8"/>
+  <circle cx="200" cy="200" r="22" fill="#6e7e8d"/>
+  <text x="200" y="352" fill="#f7fbff" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="middle">Home Appliances</text>
+</svg>
+""",
+    "books": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#13101f"/>
+  <path d="M108 84h144c24 0 40 10 40 34v180c0 18-10 26-28 26H132c-20 0-32-10-32-30V110c0-18 10-26 32-26z" fill="#00d4ff"/>
+  <path d="M140 84h132c18 0 28 10 28 28v184c0 18-10 28-28 28H140z" fill="#0d2a4d"/>
+  <path d="M154 132h92M154 170h92M154 208h92" stroke="#9ee8ff" stroke-width="10" stroke-linecap="round"/>
+  <text x="200" y="346" fill="#eef9ff" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Books</text>
+</svg>
+""",
+    "sports": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#0b1d16"/>
+  <circle cx="200" cy="172" r="86" fill="#00ff88" stroke="#d8ffea" stroke-width="8"/>
+  <path d="M142 128c38 12 78 44 116 102M258 128c-38 12-78 44-116 102M116 172h168" stroke="#0b1d16" stroke-width="8" stroke-linecap="round"/>
+  <text x="200" y="336" fill="#ebfff4" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">Sports</text>
+</svg>
+""",
 }
 
 SHOE_KEYWORDS = [
@@ -155,6 +248,21 @@ def slugify(name: str) -> str:
     cleaned = re.sub(r"[^a-z0-9\s-]", "", lowered)
     collapsed = re.sub(r"[\s_-]+", "-", cleaned).strip("-")
     return collapsed or "product"
+
+
+def normalize_text(value: str) -> str:
+    lowered = value.lower()
+    sanitized = re.sub(r"[^a-z0-9]+", " ", lowered)
+    return re.sub(r"\s+", " ", sanitized).strip()
+
+
+def tokenize(value: str) -> list[str]:
+    tokens = []
+    for token in normalize_text(value).split():
+        if len(token) < 2 or token in STOPWORDS:
+            continue
+        tokens.append(token)
+    return tokens
 
 
 def resolve_csv_path(repo_root: Path) -> Path:
@@ -422,7 +530,404 @@ def build_attributes(category_slug: str, product_name: str) -> dict:
     return {}
 
 
-def build_products(csv_path: Path) -> list[dict]:
+def get_product_brand(product: dict) -> str | None:
+    attributes = product.get("attributes", {})
+    brand = attributes.get("brand") or attributes.get("author")
+    if not brand or brand in GENERIC_BRANDS:
+        return None
+    return str(brand)
+
+
+def build_image_query(product: dict) -> str:
+    parts = [product["name"], product["categoryName"]]
+    brand = get_product_brand(product)
+    if brand and brand.lower() not in product["name"].lower():
+        parts.insert(1, brand)
+    return " ".join(part for part in parts if part).strip()
+
+
+def build_image_queries(product: dict) -> list[str]:
+    queries = []
+    seen = set()
+    brand = get_product_brand(product)
+    candidates = [
+        build_image_query(product),
+        product["name"],
+    ]
+
+    if brand:
+        candidates.append(f"{brand} {product['name']}")
+        candidates.append(f"{brand} {product['categoryName']}")
+
+    for query in candidates:
+        normalized = " ".join(query.split())
+        if not normalized or normalized in seen:
+            continue
+        queries.append(normalized)
+        seen.add(normalized)
+
+    return queries
+
+
+def get_relative_product_asset_path(filename: str) -> str:
+    return f"{PRODUCT_IMAGE_DIR}/{filename}".replace("\\", "/")
+
+
+def get_fallback_relative_path(category_slug: str) -> str:
+    filename = f"fallback-{category_slug}.svg"
+    return get_relative_product_asset_path(f"{FALLBACK_DIR}/{filename}")
+
+
+def build_product_cache_key(product: dict) -> str:
+    brand = get_product_brand(product) or "unbranded"
+    return f"{product['id']}::{slugify(product['name'])}::{slugify(brand)}"
+
+
+def ensure_parent_dir(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def relative_path_exists(repo_root: Path, relative_path: str) -> bool:
+    return (repo_root / "frontend" / relative_path).exists()
+
+
+def extension_from_mime(mime: str, url: str = "") -> str:
+    mime_map = {
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }
+    if mime:
+        mapped = mime_map.get(mime.lower())
+        if mapped:
+            return mapped
+
+    parsed_path = urllib.parse.urlparse(url).path.lower()
+    for extension in (".jpg", ".jpeg", ".png", ".webp"):
+        if parsed_path.endswith(extension):
+            return ".jpg" if extension == ".jpeg" else extension
+
+    return ".jpg"
+
+
+class ProductImageResolver:
+    def __init__(self, repo_root: Path) -> None:
+        self.repo_root = repo_root
+        self.assets_dir = repo_root / "frontend" / "assets" / "products"
+        self.cache_path = repo_root / "frontend" / "data" / IMAGE_CACHE_FILENAME
+        self.cache = self._load_cache()
+
+        self.search_cache_hits = 0
+        self.product_cache_hits = 0
+        self.downloaded_count = 0
+        self.fallback_count = 0
+        self.network_enabled = True
+        self.consecutive_search_failures = 0
+        self.last_search_request_at = 0.0
+
+        self.assets_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_fallback_assets()
+
+    def _load_cache(self) -> dict:
+        default_cache = {
+            "version": IMAGE_CACHE_VERSION,
+            "products": {},
+            "searches": {},
+            "downloads": {},
+        }
+
+        if not self.cache_path.exists():
+            return default_cache
+
+        try:
+            loaded = json.loads(self.cache_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return default_cache
+
+        if loaded.get("version") != IMAGE_CACHE_VERSION:
+            return default_cache
+
+        for key in ("products", "searches", "downloads"):
+            loaded.setdefault(key, {})
+        return loaded
+
+    def save_cache(self) -> None:
+        ensure_parent_dir(self.cache_path)
+        self.cache_path.write_text(
+            json.dumps(self.cache, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def resolve_image(self, product: dict) -> str:
+        cache_key = build_product_cache_key(product)
+        cached_product = self.cache["products"].get(cache_key)
+        if cached_product and relative_path_exists(
+            self.repo_root, cached_product["relative_path"]
+        ):
+            self.product_cache_hits += 1
+            return cached_product["relative_path"]
+
+        queries = build_image_queries(product)
+        candidate, score, matched_query = self._find_best_candidate(product, queries)
+
+        if candidate and score >= MIN_MATCH_SCORE:
+            relative_path = self._download_candidate(product, candidate)
+            if relative_path:
+                self.cache["products"][cache_key] = {
+                    "relative_path": relative_path,
+                    "match_type": "search",
+                    "query": matched_query,
+                    "score": round(score, 2),
+                    "source_title": candidate["title"],
+                }
+                return relative_path
+
+        relative_path = self._fallback_relative_path(product["category"])
+        self.cache["products"][cache_key] = {
+            "relative_path": relative_path,
+            "match_type": "fallback",
+            "query": queries[0] if queries else product["name"],
+            "score": round(score, 2),
+        }
+        self.fallback_count += 1
+        return relative_path
+
+    def _find_best_candidate(
+        self, product: dict, queries: list[str]
+    ) -> tuple[dict | None, float, str]:
+        best_candidate = None
+        best_score = float("-inf")
+        best_query = queries[0] if queries else product["name"]
+
+        for query in queries:
+            candidates = self._search_candidates(query)
+            for candidate in candidates:
+                score = self._score_candidate(product, candidate)
+                if score > best_score:
+                    best_candidate = candidate
+                    best_score = score
+                    best_query = query
+            if best_score >= MIN_MATCH_SCORE:
+                break
+
+        return best_candidate, best_score, best_query
+
+    def _search_candidates(self, query: str) -> list[dict]:
+        if not self.network_enabled:
+            return []
+
+        cached_search = self.cache["searches"].get(query)
+        if cached_search:
+            self.search_cache_hits += 1
+            return cached_search["results"]
+
+        try:
+            results = self._search_openverse_candidates(query)
+            if not results:
+                results = self._search_commons_candidates(query)
+        except (TimeoutError, urllib.error.URLError, urllib.error.HTTPError):
+            self.consecutive_search_failures += 1
+            if self.consecutive_search_failures >= 5:
+                self.network_enabled = False
+            self.cache["searches"][query] = {"results": []}
+            return []
+        self.consecutive_search_failures = 0
+
+        self.cache["searches"][query] = {"results": results}
+        return results
+
+    def _search_openverse_candidates(self, query: str) -> list[dict]:
+        params = {
+            "q": query,
+            "page_size": str(MAX_SEARCH_RESULTS),
+            "mature": "false",
+        }
+        url = f"{OPENVERSE_API_URL}?{urllib.parse.urlencode(params)}"
+        response = self._fetch_json(url)
+
+        results = []
+        for item in response.get("results", []):
+            image_url = item.get("url")
+            if not image_url:
+                continue
+
+            results.append(
+                {
+                    "title": item.get("title") or "",
+                    "url": image_url,
+                    "mime": item.get("filetype") or "",
+                    "width": item.get("width"),
+                    "height": item.get("height"),
+                    "source": "openverse",
+                    "tags": [tag.get("name", "") for tag in item.get("tags", [])],
+                }
+            )
+
+        return results
+
+    def _search_commons_candidates(self, query: str) -> list[dict]:
+        params = {
+            "action": "query",
+            "format": "json",
+            "generator": "search",
+            "gsrnamespace": "6",
+            "gsrsearch": query,
+            "gsrlimit": str(MAX_SEARCH_RESULTS),
+            "prop": "imageinfo",
+            "iiprop": "url|mime|size",
+            "iiurlwidth": "800",
+        }
+        url = f"{COMMONS_API_URL}?{urllib.parse.urlencode(params)}"
+        response = self._fetch_search_json(url)
+
+        pages = response.get("query", {}).get("pages", {})
+        results = []
+        for page in pages.values():
+            image_info = (page.get("imageinfo") or [{}])[0]
+            mime = image_info.get("mime", "")
+            if mime not in {"image/jpeg", "image/jpg", "image/png", "image/webp"}:
+                continue
+
+            image_url = image_info.get("thumburl") or image_info.get("url")
+            if not image_url:
+                continue
+
+            results.append(
+                {
+                    "title": page.get("title", "").removeprefix("File:"),
+                    "url": image_url,
+                    "mime": mime,
+                    "width": image_info.get("thumbwidth") or image_info.get("width"),
+                    "height": image_info.get("thumbheight") or image_info.get("height"),
+                    "source": "commons",
+                    "tags": [],
+                }
+            )
+
+        return results
+
+    def _score_candidate(self, product: dict, candidate: dict) -> float:
+        title_tokens = set(tokenize(candidate["title"]))
+        tag_tokens = set()
+        for tag in candidate.get("tags", []):
+            tag_tokens.update(tokenize(tag))
+        name_tokens = set(tokenize(product["name"]))
+        category_tokens = set(tokenize(product["categoryName"]))
+        category_tokens.update(CATEGORY_HINTS.get(product["category"], []))
+        brand = get_product_brand(product)
+        brand_tokens = set(tokenize(brand)) if brand else set()
+        searchable_tokens = title_tokens | tag_tokens
+
+        score = 0.0
+        normalized_name = normalize_text(product["name"])
+        normalized_title = normalize_text(candidate["title"])
+
+        if normalized_name and normalized_name in normalized_title:
+            score += 8.0
+
+        score += len(name_tokens & searchable_tokens) * 1.8
+        score += len(category_tokens & searchable_tokens) * 0.9
+        score += len(brand_tokens & searchable_tokens) * 2.5
+
+        if brand_tokens and brand_tokens.issubset(searchable_tokens):
+            score += 2.0
+
+        if candidate.get("width", 0) and candidate.get("height", 0):
+            if min(candidate["width"], candidate["height"]) >= 300:
+                score += 0.5
+
+        if any(token in searchable_tokens for token in BANNED_IMAGE_TOKENS):
+            score -= 4.0
+
+        if product["category"] != "books" and "cover" in title_tokens:
+            score -= 1.5
+
+        return score
+
+    def _download_candidate(self, product: dict, candidate: dict) -> str | None:
+        if not self.network_enabled:
+            return None
+
+        cached_download = self.cache["downloads"].get(candidate["url"])
+        if cached_download and relative_path_exists(
+            self.repo_root, cached_download["relative_path"]
+        ):
+            return cached_download["relative_path"]
+
+        suffix = hashlib.sha1(candidate["url"].encode("utf-8")).hexdigest()[:10]
+        extension = extension_from_mime(candidate["mime"], candidate["url"])
+        filename = (
+            f"{product['category']}-{slugify(product['name'])}-{suffix}{extension}"
+        )
+        target_path = self.assets_dir / filename
+        relative_path = get_relative_product_asset_path(filename)
+
+        if not target_path.exists():
+            try:
+                binary = self._fetch_binary(candidate["url"])
+            except (TimeoutError, urllib.error.URLError, urllib.error.HTTPError):
+                return None
+            target_path.write_bytes(binary)
+            self.downloaded_count += 1
+
+        self.cache["downloads"][candidate["url"]] = {
+            "relative_path": relative_path,
+            "source_title": candidate["title"],
+        }
+        return relative_path
+
+    def _fallback_relative_path(self, category_slug: str) -> str:
+        return get_fallback_relative_path(category_slug)
+
+    def _ensure_fallback_assets(self) -> None:
+        fallback_dir = self.assets_dir / FALLBACK_DIR
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+
+        for category_slug, svg in FALLBACK_SVGS.items():
+            fallback_path = fallback_dir / f"fallback-{category_slug}.svg"
+            if not fallback_path.exists():
+                fallback_path.write_text(svg, encoding="utf-8")
+
+    def _fetch_json(self, url: str) -> dict:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "NeonRetroProductImageResolver/1.0",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return json.load(response)
+
+    def _fetch_search_json(self, url: str) -> dict:
+        for attempt, delay in enumerate((0.0, *SEARCH_RETRY_DELAYS_SECONDS), start=1):
+            self._throttle_search_requests()
+            try:
+                return self._fetch_json(url)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 or attempt > len(SEARCH_RETRY_DELAYS_SECONDS):
+                    raise
+                time.sleep(delay or SEARCH_RETRY_DELAYS_SECONDS[0])
+
+        raise urllib.error.HTTPError(url, 429, "Too Many Requests", None, None)
+
+    def _fetch_binary(self, url: str) -> bytes:
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "NeonRetroProductImageResolver/1.0"},
+        )
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return response.read()
+
+    def _throttle_search_requests(self) -> None:
+        elapsed = time.monotonic() - self.last_search_request_at
+        if elapsed < SEARCH_MIN_INTERVAL_SECONDS:
+            time.sleep(SEARCH_MIN_INTERVAL_SECONDS - elapsed)
+        self.last_search_request_at = time.monotonic()
+
+
+def build_products(csv_path: Path, image_resolver: ProductImageResolver | None = None) -> list[dict]:
     products = []
     seen_names = set()
 
@@ -439,27 +944,30 @@ def build_products(csv_path: Path) -> list[dict]:
             product_id = len(products) + 1
             price = round(float(row["Unit Price"]), 2)
 
-            seed = f"{CATEGORY_SEEDS.get(slug, 'product')}-{product_id}"
+            product = {
+                "id": product_id,
+                "category": slug,
+                "categoryName": category_name,
+                "name": product_name,
+                "price": price,
+                "image": "",
+                "discount": 0,
+                "salesCount": (product_id * 37) % 950 + 50,
+                "description": (
+                    f"{category_name} product: {product_name}. "
+                    "High quality item with fast shipping and easy returns."
+                ),
+                "stock": (product_id * 13) % 46 + 5,
+                "rating": round(3.5 + (product_id % 16) * 0.1, 1),
+                "attributes": build_attributes(slug, product_name),
+            }
 
-            products.append(
-                {
-                    "id": product_id,
-                    "category": slug,
-                    "categoryName": category_name,
-                    "name": product_name,
-                    "price": price,
-                    "image": f"https://picsum.photos/seed/{seed}/400/400",
-                    "discount": 0,
-                    "salesCount": (product_id * 37) % 950 + 50,
-                    "description": (
-                        f"{category_name} product: {product_name}. "
-                        "High quality item with fast shipping and easy returns."
-                    ),
-                    "stock": (product_id * 13) % 46 + 5,
-                    "rating": round(3.5 + (product_id % 16) * 0.1, 1),
-                    "attributes": build_attributes(slug, product_name),
-                }
-            )
+            if image_resolver is None:
+                product["image"] = get_fallback_relative_path(slug)
+            else:
+                product["image"] = image_resolver.resolve_image(product)
+
+            products.append(product)
             seen_names.add(product_name)
 
     return products
@@ -471,8 +979,13 @@ def main() -> None:
     csv_path = resolve_csv_path(repo_root)
     output_path = repo_root / "frontend" / "data" / "products.json"
 
-    products = build_products(csv_path)
-    output_path.write_text(json.dumps(products, indent=2), encoding="utf-8")
+    image_resolver = ProductImageResolver(repo_root)
+    products = build_products(csv_path, image_resolver=image_resolver)
+    output_path.write_text(
+        json.dumps(products, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    image_resolver.save_cache()
 
     counts = Counter(product["categoryName"] for product in products)
     print(f"Total products: {len(products)}")
@@ -485,6 +998,11 @@ def main() -> None:
         "Sports",
     ]:
         print(f"{category_name}: {counts.get(category_name, 0)}")
+
+    print(f"Downloaded images: {image_resolver.downloaded_count}")
+    print(f"Product cache hits: {image_resolver.product_cache_hits}")
+    print(f"Search cache hits: {image_resolver.search_cache_hits}")
+    print(f"Fallback images used: {image_resolver.fallback_count}")
 
 
 if __name__ == "__main__":

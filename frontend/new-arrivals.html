@@ -53,7 +53,7 @@
   function showToast(m){let t=document.getElementById('toast'); if(!t){t=document.createElement('div'); t.id='toast'; t.className='fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black border border-[#00FF88] text-[#00FF88] px-6 py-3 text-sm font-mono z-50 opacity-0 transition'; document.body.appendChild(t);} t.innerText=m; t.classList.remove('opacity-0'); setTimeout(()=>t.classList.add('opacity-0'),2000);}
   
   async function loadNewProducts() {
-    const response = await fetch('data/products.json');
+      const response = await fetch('data/products_updated.json');
     const allProducts = await response.json();
     const newArrivals = [...allProducts].sort((a, b) => b.id - a.id);
     const container = document.getElementById('new-products');

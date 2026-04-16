@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#101820"/>
+  <rect x="108" y="64" width="184" height="256" rx="24" fill="#e9eef2" stroke="#5d6d7e" stroke-width="8"/>
+  <circle cx="200" cy="200" r="52" fill="#b8c4cf" stroke="#5d6d7e" stroke-width="8"/>
+  <circle cx="200" cy="200" r="22" fill="#6e7e8d"/>
+  <text x="200" y="352" fill="#f7fbff" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="middle">Home Appliances</text>
+</svg>
