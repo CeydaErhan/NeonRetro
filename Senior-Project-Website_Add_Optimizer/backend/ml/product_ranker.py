@@ -12,10 +12,28 @@ from typing import Any
 import joblib
 
 PRODUCT_RANKER_PATH = Path(__file__).resolve().parent / "product_ranker.pkl"
-PRODUCTS_PATHS = (
-    Path(__file__).resolve().parents[3] / "frontend" / "data" / "products.json",
-    Path("/seed-data/products.json"),
-)
+
+
+def _get_products_paths() -> tuple[Path, ...]:
+    resolved_path = Path(__file__).resolve()
+    paths: list[Path] = []
+
+    for parent_index in (2, 3):
+        try:
+            paths.append(resolved_path.parents[parent_index] / "frontend" / "data" / "products.json")
+        except IndexError:
+            continue
+
+    paths.extend(
+        (
+            Path("/seed-data/products.json"),
+            Path("/app/frontend/data/products.json"),
+        )
+    )
+    return tuple(paths)
+
+
+PRODUCTS_PATHS = _get_products_paths()
 
 
 @dataclass

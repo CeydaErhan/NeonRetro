@@ -26,10 +26,15 @@ from ml.scoring import CATEGORY_SLUGS, score_session
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
-PRODUCTS_PATHS = (
-    Path(__file__).resolve().parents[4] / "frontend" / "data" / "products.json",
-    Path("/seed-data/products.json"),
-)
+PRODUCTS_PATHS = []
+_rec_file = Path(__file__).resolve()
+for _idx in (2, 3, 4):
+    try:
+        PRODUCTS_PATHS.append(_rec_file.parents[_idx] / "frontend" / "data" / "products.json")
+    except IndexError:
+        pass
+PRODUCTS_PATHS.extend([Path("/seed-data/products.json"), Path("/app/frontend/data/products.json")])
+PRODUCTS_PATHS = tuple(PRODUCTS_PATHS)
 
 
 def _get_session_or_404(db: Session, session_id: int) -> VisitorSession:
