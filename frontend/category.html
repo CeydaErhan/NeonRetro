@@ -43,6 +43,7 @@
   <div id="category-products" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>
 </main>
 
+<script src="tracker.js"></script>
 <script>
   const categories = ['electronics','clothing','beauty','home-appliances','books','sports'];
   const catNames = {
@@ -64,8 +65,12 @@
   
   function getCart(){return JSON.parse(localStorage.getItem('neon_cart')||'[]');}
   function saveCart(cart){localStorage.setItem('neon_cart',JSON.stringify(cart));}
-  function addToCart(product){const cart=getCart(); const e=cart.find(i=>i.id===product.id); e?e.quantity++:cart.push({id:product.id,name:product.name,price:product.price,image:product.image,quantity:1}); saveCart(cart); showToast(`🛒 ${product.name} added to cart`);}
+  function addToCart(product){const cart=getCart(); const e=cart.find(i=>i.id===product.id); e?e.quantity++:cart.push({id:product.id,name:product.name,price:product.price,image:product.image,quantity:1}); saveCart(cart); trackCatalogInteraction('add-to-cart',product,{source:'category',quantity:1,cart_size_after_add:cart.reduce((sum,item)=>sum+item.quantity,0)}); showToast(`🛒 ${product.name} added to cart`);}
   function showToast(m){let t=document.getElementById('toast'); if(!t){t=document.createElement('div'); t.id='toast'; t.className='fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black border border-[#00FF88] text-[#00FF88] px-6 py-3 text-sm font-mono z-50 opacity-0 transition'; document.body.appendChild(t);} t.innerText=m; t.classList.remove('opacity-0'); setTimeout(()=>t.classList.add('opacity-0'),2000);}
+  let allProducts = [];
+  function buildProductTrackingMetadata(product){const attributes=product?.attributes||{}; const availableAttributes={}; Object.entries(attributes).forEach(([key,value])=>{availableAttributes[key]=Array.isArray(value)?[...value]:value;}); return {product_id:product?.id??null,product_name:product?.name??null,category:product?.category??null,category_name:product?.categoryName??null,price:product?.price??null,discount:product?.discount??0,stock:product?.stock??null,available_attributes:availableAttributes};}
+  function trackCatalogInteraction(element,product,extraMetadata={}){if(!window.tracker?.track||!product)return; tracker.track('click',element,{metadata:{...buildProductTrackingMetadata(product),...extraMetadata}});}
+  function goToProduct(productId){const product=allProducts.find(p=>p.id===productId); trackCatalogInteraction('open-product',product,{source:'category'}); window.location.href=`product.html?id=${productId}`;}
   const colorMap = {
     'Black': '#1a1a1a',
     'White': '#f5f5f5',
@@ -102,15 +107,15 @@
   async function loadCategory() {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get('cat');
-      const response = await fetch('data/products_updated.json');
-    const allProducts = await response.json();
+      const response = await fetch('data/products.json');
+    allProducts = await response.json();
     const filtered = allProducts.filter(p => p.category === cat);
     document.getElementById('category-title').innerHTML = `📂 ${catDisplay[cat] || 'Category'}`;
     const container = document.getElementById('category-products');
     container.innerHTML = filtered.map(p => {
       const hasDiscount = p.discount > 0;
       const final = hasDiscount ? (p.price * (1 - p.discount / 100)).toFixed(2) : p.price.toFixed(2);
-      return `<div onclick="location.href='product.html?id=${p.id}'" class="neon-card overflow-hidden"><div class="relative aspect-square border-b border-[#00FF88]"><img src="${p.image}" class="w-full h-full object-cover">${hasDiscount?`<span class="absolute top-1 left-1 bg-[#FF2D75] text-black text-[10px] font-black px-1">-${p.discount}%</span>`:''}</div><div class="p-2"><span class="text-[9px] text-[#00D4FF]">${catNames[p.category] || p.categoryName}</span><h3 class="font-bold text-xs text-[#00FF88] truncate">${p.name}</h3>${renderAttributeBadges(p)}<div class="flex justify-between mt-1"><span class="text-[#FF2D75] font-black">$${final}</span>${hasDiscount?`<span class="text-[9px] line-through text-gray-500">$${p.price}</span>`:''}</div><button onclick="event.stopPropagation();addToCart(${JSON.stringify(p).replace(/"/g,'&quot;')})" class="w-full retro-btn-neon text-[10px] py-1 mt-2">ADD TO CART</button></div></div>`;
+      return `<div onclick="goToProduct(${p.id})" class="neon-card overflow-hidden"><div class="relative aspect-square border-b border-[#00FF88]"><img src="${p.image}" class="w-full h-full object-cover">${hasDiscount?`<span class="absolute top-1 left-1 bg-[#FF2D75] text-black text-[10px] font-black px-1">-${p.discount}%</span>`:''}</div><div class="p-2"><span class="text-[9px] text-[#00D4FF]">${catNames[p.category] || p.categoryName}</span><h3 class="font-bold text-xs text-[#00FF88] truncate">${p.name}</h3>${renderAttributeBadges(p)}<div class="flex justify-between mt-1"><span class="text-[#FF2D75] font-black">$${final}</span>${hasDiscount?`<span class="text-[9px] line-through text-gray-500">$${p.price}</span>`:''}</div><button onclick="event.stopPropagation();addToCart(${JSON.stringify(p).replace(/"/g,'&quot;')})" class="w-full retro-btn-neon text-[10px] py-1 mt-2">ADD TO CART</button></div></div>`;
     }).join('');
   }
   document.addEventListener('DOMContentLoaded', () => { loadCategory(); });

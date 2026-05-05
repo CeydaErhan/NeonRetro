@@ -21,21 +21,41 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/adoptimizer
+      ALEMBIC_DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/adoptimizer
+      CORS_ALLOW_ORIGINS: http://localhost:8000,http://127.0.0.1:8000,http://localhost:5173,http://127.0.0.1:5173
+      SECRET_KEY: change-this-secret-key-in-production
+      ALGORITHM: HS256
+    volumes:
+      - ../frontend/data:/seed-data:ro
     ports:
-      - "8000:8000"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+      - "10000:10000"
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 10000"
 
-  frontend:
-    build:
-      context: ./frontend
+  admin-frontend:
+    image: node:20
+    working_dir: /app
     depends_on:
       - backend
+    environment:
+      VITE_API_URL: http://localhost:10000
+    volumes:
+      - ./frontend:/app
+      - admin_frontend_node_modules:/app/node_modules
     ports:
-      - "3000:3000"
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+
+  store:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ../frontend:/app
+    ports:
+      - "8000:8000"
+    command: python -m http.server 8000
 
 volumes:
   postgres_data:
+  admin_frontend_node_modules:

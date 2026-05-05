@@ -75,6 +75,19 @@
   function getCart() { return JSON.parse(localStorage.getItem('neon_cart') || '[]'); }
   function updateCartBadge() { document.getElementById('cart-badge').innerText = getCart().reduce((s,i)=>s+i.quantity,0); }
   const selectedAttributes = {};
+  const ATTRIBUTE_LABELS = {
+    author: 'Author',
+    brand: 'Brand',
+    colors: 'Color',
+    format: 'Format',
+    gender: 'Gender',
+    genre: 'Genre',
+    sizes: 'Size',
+    skin_type: 'Skin Type',
+    storage: 'Storage',
+    warranty: 'Warranty'
+  };
+  const ATTRIBUTE_PRIORITY = ['brand', 'author', 'genre', 'gender', 'sizes', 'colors', 'storage', 'format', 'skin_type', 'warranty'];
   document.addEventListener('DOMContentLoaded', () => { updateFavoritesBadge(); updateCartBadge();
     document.getElementById('search-btn')?.addEventListener('click', handleSearch);
     document.getElementById('search-input')?.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleSearch(); });
@@ -98,23 +111,55 @@
     e?e.quantity++:cart.push({...cartItem,quantity:1});
     saveCart(cart);
     if(window.tracker?.track){
-      tracker.track('click', 'add-to-cart', {
-        product_id: product.id,
-        category: product.category,
-        price: product.price,
-        brand: product.attributes?.brand || null,
-        selected_size: selectedAttributes.sizes || selectedAttributes.format || null,
-        selected_color: selectedAttributes.colors || null,
-        selected_storage: selectedAttributes.storage || null,
-        selected_skin_type: selectedAttributes.skin_type || null
+      trackProductInteraction('add-to-cart', product, {
+        quantity: 1,
+        cart_size_after_add: cart.reduce((sum,item)=>sum+item.quantity,0)
       });
     }
     showToast(`🛒 ${product.name} added to cart`);
   }
   function showToast(m){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';t.className='fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black border border-[#00FF88] text-[#00FF88] px-6 py-3 text-sm font-mono z-50 opacity-0 transition';document.body.appendChild(t);}t.innerText=m;t.classList.remove('opacity-0');setTimeout(()=>t.classList.add('opacity-0'),2000);}
   function isFavorite(id){return getFavorites().includes(id);}
-  function toggleFavorite(id){let f=getFavorites();f.includes(id)?f=f.filter(i=>i!==id):f.push(id);localStorage.setItem('neon_favorites',JSON.stringify(f));updateFavoritesBadge();const btn=document.querySelector('.favorite-btn');if(btn)btn.innerHTML=isFavorite(id)?'<i class="fas fa-heart text-[#FF2D75] text-xl"></i>':'<i class="far fa-heart text-xl"></i>';showToast(isFavorite(id)?'💖 ADDED TO FAVORITES':'💔 REMOVED FROM FAVORITES');}
+  function toggleFavorite(id){let f=getFavorites();const product=window.__currentProduct?.id===id?window.__currentProduct:null;const wasFavorite=f.includes(id);f=wasFavorite?f.filter(i=>i!==id):[...f,id];localStorage.setItem('neon_favorites',JSON.stringify(f));updateFavoritesBadge();const btn=document.querySelector('.favorite-btn');if(btn)btn.innerHTML=isFavorite(id)?'<i class="fas fa-heart text-[#FF2D75] text-xl"></i>':'<i class="far fa-heart text-xl"></i>';if(product){trackProductInteraction(wasFavorite?'remove-favorite':'add-favorite',product,{favorites_count:f.length});}showToast(isFavorite(id)?'💖 ADDED TO FAVORITES':'💔 REMOVED FROM FAVORITES');}
   function escapeHtml(value){return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+  function formatAttributeLabel(key){return ATTRIBUTE_LABELS[key] || key.replace(/_/g,' ').replace(/\b\w/g,char=>char.toUpperCase());}
+  function getSortedAttributeEntries(attributes={}){
+    return Object.entries(attributes).sort(([a],[b])=>{
+      const aIndex = ATTRIBUTE_PRIORITY.indexOf(a);
+      const bIndex = ATTRIBUTE_PRIORITY.indexOf(b);
+      if(aIndex === -1 && bIndex === -1) return a.localeCompare(b);
+      if(aIndex === -1) return 1;
+      if(bIndex === -1) return -1;
+      return aIndex - bIndex;
+    });
+  }
+  function buildProductTrackingMetadata(product){
+    const attributes = product?.attributes || {};
+    const availableAttributes = {};
+    Object.entries(attributes).forEach(([key,value])=>{
+      availableAttributes[key] = Array.isArray(value) ? [...value] : value;
+    });
+    return {
+      product_id: product?.id ?? null,
+      product_name: product?.name ?? null,
+      category: product?.category ?? null,
+      category_name: product?.categoryName ?? null,
+      price: product?.price ?? null,
+      discount: product?.discount ?? 0,
+      stock: product?.stock ?? null,
+      selected_attributes: { ...selectedAttributes },
+      available_attributes: availableAttributes
+    };
+  }
+  function trackProductInteraction(element, product, extraMetadata = {}){
+    if(!window.tracker?.track || !product) return;
+    tracker.track('click', element, {
+      metadata: {
+        ...buildProductTrackingMetadata(product),
+        ...extraMetadata
+      }
+    });
+  }
   function selectorGroup(label,key,options){
     if(!Array.isArray(options)||!options.length)return '';
     selectedAttributes[key]=options[0];
@@ -125,17 +170,12 @@
     return `<p class="text-sm text-[#00D4FF]"><span class="text-[#00FF88] font-bold">${label}:</span> ${escapeHtml(value)}</p>`;
   }
   function buildAttributeSelectors(attributes={}){
-    return `<div class="mt-6 space-y-4">
-      ${infoLine('Brand', attributes.brand)}
-      ${infoLine('Author', attributes.author)}
-      ${infoLine('Genre', attributes.genre)}
-      ${selectorGroup('Size','sizes',attributes.sizes)}
-      ${selectorGroup('Color','colors',attributes.colors)}
-      ${selectorGroup('Storage','storage',attributes.storage)}
-      ${selectorGroup('Format','format',attributes.format)}
-      ${selectorGroup('Skin Type','skin_type',attributes.skin_type)}
-      ${selectorGroup('Warranty','warranty',attributes.warranty)}
-    </div>`;
+    const sections = getSortedAttributeEntries(attributes).map(([key,value])=>{
+      const label = formatAttributeLabel(key);
+      return Array.isArray(value) ? selectorGroup(label,key,value) : infoLine(label,value);
+    }).filter(Boolean);
+    if(!sections.length) return '';
+    return `<div class="mt-6 space-y-4">${sections.join('')}</div>`;
   }
   function bindAttributeSelectors(){
     document.querySelectorAll('.attribute-option').forEach(button=>{
@@ -147,6 +187,11 @@
           item.classList.remove('bg-cyan-500','text-black','font-bold');
         });
         button.classList.add('bg-cyan-500','text-black','font-bold');
+        trackProductInteraction('select-attribute', window.__currentProduct, {
+          attribute_group: group,
+          attribute_label: formatAttributeLabel(group),
+          attribute_value: value
+        });
         // Update product image on color change
         if(group === 'colors'){
           const img = document.getElementById('product-main-image');
@@ -173,7 +218,8 @@
       });
     });
   }
-  async function loadProduct(){const response=await fetch('data/products_updated.json');const allProducts=await response.json();const urlParams=new URLSearchParams(window.location.search);const id=urlParams.get('id');if(!id){window.location.href='index.html';return;}const p=allProducts.find(p=>p.id==id);window.__currentProduct = p;if(!p){document.getElementById('product-detail').innerHTML='<div class="p-8 text-center text-[#FF2D75]">❌ PRODUCT NOT FOUND</div>';return;}Object.keys(selectedAttributes).forEach(key=>delete selectedAttributes[key]);const disc=p.discount>0;const final=disc?(p.price*(1-p.discount/100)).toFixed(2):p.price.toFixed(2);const stockStatus=p.stock>10?'✅ IN STOCK':(p.stock>0?`⚠️ ONLY ${p.stock} LEFT!`:'❌ OUT OF STOCK');const stockColor=p.stock>10?'text-[#00FF88]':(p.stock>0?'text-[#FF2D75]':'text-red-500');const attributeSelectors=buildAttributeSelectors(p.attributes||{});document.getElementById('product-detail').innerHTML=`<div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6"><div class="relative"><img id="product-main-image" src="${p.defaultImage || p.image}" data-strategy="${p.imageStrategy || 'single'}" data-color="" class="w-full rounded-lg border border-[#00FF88] transition-all duration-300">${disc?`<span class="absolute top-4 left-4 bg-[#FF2D75] text-black text-sm font-bold px-3 py-1 border border-black">-%${p.discount}</span>`:''}</div><div><div class="flex items-center gap-2 mb-2"><span class="text-xs text-[#00D4FF] border border-[#00D4FF] px-2 py-1 rounded">${p.categoryName}</span><span class="text-xs text-[#00FF88]">⭐ ${p.rating} (${p.salesCount})</span></div><h1 class="text-2xl font-bold text-[#00FF88]">${p.name}</h1><p class="text-[#00D4FF] mt-4 leading-relaxed">${p.description}</p><div class="mt-6"><div class="flex items-baseline gap-3"><span class="text-3xl font-bold text-[#FF2D75]">$${final}</span>${disc?`<span class="text-sm line-through text-gray-500">$${p.price}</span>`:''}</div><p class="text-sm ${stockColor} mt-2">${stockStatus}</p></div>${attributeSelectors}<div class="flex gap-3 mt-8"><button id="add-to-cart-btn" class="flex-1 retro-btn-neon py-3"><i class="fas fa-cart-plus mr-2"></i> ADD TO CART</button><button onclick="toggleFavorite(${p.id})" class="favorite-btn w-12 h-12 retro-btn-neon flex items-center justify-center">${isFavorite(p.id)?'<i class="fas fa-heart text-[#FF2D75] text-xl"></i>':'<i class="far fa-heart text-xl"></i>'}</button></div><div class="border-t border-[#00FF88] mt-6 pt-6 grid grid-cols-2 gap-3 text-sm"><div class="text-[#00FF88]"><i class="fas fa-truck mr-2"></i> FREE SHIPPING</div><div class="text-[#00FF88]"><i class="fas fa-undo-alt mr-2"></i> 30-DAY RETURNS</div><div class="text-[#00FF88]"><i class="fas fa-shield-alt mr-2"></i> GUARANTEED</div><div class="text-[#00FF88]"><i class="fas fa-headset mr-2"></i> 24/7 SUPPORT</div></div></div></div>`;bindAttributeSelectors();document.getElementById('add-to-cart-btn')?.addEventListener('click',()=>addToCart(p));const similar=allProducts.filter(s=>s.category===p.category&&s.id!==p.id).slice(0,4);document.getElementById('similar-products').innerHTML=similar.map(s=>`<div onclick="location.href='product.html?id=${s.id}'" class="neon-card rounded-lg p-3"><img src="${s.image}" class="w-full h-32 object-cover rounded-lg border border-[#00FF88]"><h3 class="font-bold text-xs mt-2 text-[#00FF88] truncate">${s.name}</h3><p class="text-sm font-bold text-[#FF2D75]">$${s.price.toFixed(2)}</p></div>`).join('');}
+  function openProductFromCollection(product,source){trackProductInteraction('open-product',product,{source});window.location.href=`product.html?id=${product.id}`;}
+  async function loadProduct(){const response=await fetch('data/products.json');const allProducts=await response.json();const urlParams=new URLSearchParams(window.location.search);const id=urlParams.get('id');if(!id){window.location.href='index.html';return;}const p=allProducts.find(p=>p.id==id);window.__currentProduct = p;if(!p){document.getElementById('product-detail').innerHTML='<div class="p-8 text-center text-[#FF2D75]">❌ PRODUCT NOT FOUND</div>';return;}Object.keys(selectedAttributes).forEach(key=>delete selectedAttributes[key]);const disc=p.discount>0;const final=disc?(p.price*(1-p.discount/100)).toFixed(2):p.price.toFixed(2);const stockStatus=p.stock>10?'✅ IN STOCK':(p.stock>0?`⚠️ ONLY ${p.stock} LEFT!`:'❌ OUT OF STOCK');const stockColor=p.stock>10?'text-[#00FF88]':(p.stock>0?'text-[#FF2D75]':'text-red-500');const attributeSelectors=buildAttributeSelectors(p.attributes||{});document.getElementById('product-detail').innerHTML=`<div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-6"><div class="relative"><img id="product-main-image" src="${p.defaultImage || p.image}" data-strategy="${p.imageStrategy || 'single'}" data-color="" class="w-full rounded-lg border border-[#00FF88] transition-all duration-300">${disc?`<span class="absolute top-4 left-4 bg-[#FF2D75] text-black text-sm font-bold px-3 py-1 border border-black">-%${p.discount}</span>`:''}</div><div><div class="flex items-center gap-2 mb-2"><span class="text-xs text-[#00D4FF] border border-[#00D4FF] px-2 py-1 rounded">${p.categoryName}</span><span class="text-xs text-[#00FF88]">⭐ ${p.rating} (${p.salesCount})</span></div><h1 class="text-2xl font-bold text-[#00FF88]">${p.name}</h1><p class="text-[#00D4FF] mt-4 leading-relaxed">${p.description}</p><div class="mt-6"><div class="flex items-baseline gap-3"><span class="text-3xl font-bold text-[#FF2D75]">$${final}</span>${disc?`<span class="text-sm line-through text-gray-500">$${p.price}</span>`:''}</div><p class="text-sm ${stockColor} mt-2">${stockStatus}</p></div>${attributeSelectors}<div class="flex gap-3 mt-8"><button id="add-to-cart-btn" class="flex-1 retro-btn-neon py-3"><i class="fas fa-cart-plus mr-2"></i> ADD TO CART</button><button onclick="toggleFavorite(${p.id})" class="favorite-btn w-12 h-12 retro-btn-neon flex items-center justify-center">${isFavorite(p.id)?'<i class="fas fa-heart text-[#FF2D75] text-xl"></i>':'<i class="far fa-heart text-xl"></i>'}</button></div><div class="border-t border-[#00FF88] mt-6 pt-6 grid grid-cols-2 gap-3 text-sm"><div class="text-[#00FF88]"><i class="fas fa-truck mr-2"></i> FREE SHIPPING</div><div class="text-[#00FF88]"><i class="fas fa-undo-alt mr-2"></i> 30-DAY RETURNS</div><div class="text-[#00FF88]"><i class="fas fa-shield-alt mr-2"></i> GUARANTEED</div><div class="text-[#00FF88]"><i class="fas fa-headset mr-2"></i> 24/7 SUPPORT</div></div></div></div>`;bindAttributeSelectors();document.getElementById('add-to-cart-btn')?.addEventListener('click',()=>addToCart(p));const similar=allProducts.filter(s=>s.category===p.category&&s.id!==p.id).slice(0,4);document.getElementById('similar-products').innerHTML=similar.map(s=>`<div onclick="openProductFromCollection(${JSON.stringify(s).replace(/"/g,'&quot;')}, 'similar-products')" class="neon-card rounded-lg p-3"><img src="${s.image}" class="w-full h-32 object-cover rounded-lg border border-[#00FF88]"><h3 class="font-bold text-xs mt-2 text-[#00FF88] truncate">${s.name}</h3><p class="text-sm font-bold text-[#FF2D75]">$${s.price.toFixed(2)}</p></div>`).join('');}
   document.addEventListener('DOMContentLoaded',()=>{loadProduct();saveCart(getCart());});
 </script>
 

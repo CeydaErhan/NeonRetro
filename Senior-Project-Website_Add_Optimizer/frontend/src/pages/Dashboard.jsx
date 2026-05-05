@@ -44,39 +44,19 @@ function formatDateKey(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function buildVisitorsByDay(events) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const dates = Array.from({ length: 7 }, (_, index) => {
-    const value = new Date(today);
-    value.setDate(today.getDate() - (6 - index));
-    return value;
-  });
-
-  const counts = new Map(dates.map((date) => [formatDateKey(date), 0]));
-
-  events.forEach((event) => {
-    if (event?.type !== "page_view" && event?.type !== "pageview") {
-      return;
+function buildVisitorsByDay(rows) {
+  return rows.map((row) => {
+    const date = row?.day ? new Date(row.day) : null;
+    if (!date || Number.isNaN(date.getTime())) {
+      return {
+        day: "-",
+        visitors: Number(row?.visitors ?? 0)
+      };
     }
 
-    const timestamp = event?.timestamp ? new Date(event.timestamp) : null;
-    if (!timestamp || Number.isNaN(timestamp.getTime())) {
-      return;
-    }
-
-    const key = formatDateKey(timestamp);
-    if (counts.has(key)) {
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-  });
-
-  return dates.map((date) => {
-    const key = formatDateKey(date);
     return {
       day: formatChartDay(date),
-      visitors: counts.get(key) ?? 0
+      visitors: Number(row?.visitors ?? 0)
     };
   });
 }
@@ -133,16 +113,18 @@ export default function Dashboard() {
     const loadDashboard = async () => {
       try {
         const headers = getAuthHeaders();
-        const [summaryResponse, eventsResponse, campaignsResponse] = await Promise.all([
+        const [summaryResponse, visitorsResponse, eventsResponse, campaignsResponse] = await Promise.all([
           api.get("/analytics/summary", { headers }),
+          api.get("/analytics/visitors-by-day", { headers }),
           api.get("/events/list", { headers }),
           api.get("/campaigns", { headers })
         ]);
         const events = Array.isArray(eventsResponse.data) ? eventsResponse.data : [];
         const campaigns = Array.isArray(campaignsResponse.data) ? campaignsResponse.data : [];
+        const visitors = Array.isArray(visitorsResponse.data) ? visitorsResponse.data : [];
 
         setSummary({ ...initialSummary, ...summaryResponse.data });
-        setVisitorsByDay(buildVisitorsByDay(events));
+        setVisitorsByDay(buildVisitorsByDay(visitors));
         setCampaignChart(buildCampaignChartData(campaigns, events));
         setError("");
       } catch (err) {
