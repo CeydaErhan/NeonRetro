@@ -1,5 +1,6 @@
 """Analytics reporting routes."""
 
+from datetime import date, timedelta
 from io import StringIO
 
 from fastapi import APIRouter, Depends
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Ad, Campaign, Event, Impression, User, VisitorSession
+from app.schemas import VisitorsByDayRead
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -35,6 +37,39 @@ async def analytics_summary(_: User = Depends(get_current_user), db: Session = D
         "clicks": int(clicks),
         "ctr": round(ctr, 4),
     }
+
+
+@router.get("/visitors-by-day", response_model=list[VisitorsByDayRead])
+async def visitors_by_day(
+    days: int = 7,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[VisitorsByDayRead]:
+    """Return page-view counts grouped by day for the requested recent window."""
+    days = max(1, min(days, 30))
+    today = date.today()
+    start_date = today - timedelta(days=days - 1)
+
+    stmt = (
+        select(func.date(Event.timestamp).label("day"), func.count(Event.id).label("visitors"))
+        .where(Event.type.in_(["page_view", "pageview"]))
+        .where(func.date(Event.timestamp) >= start_date)
+        .group_by(func.date(Event.timestamp))
+        .order_by(func.date(Event.timestamp).asc())
+    )
+    rows = db.execute(stmt).all()
+    counts = {str(day): int(visitors or 0) for day, visitors in rows}
+
+    results: list[VisitorsByDayRead] = []
+    for index in range(days):
+        current_day = start_date + timedelta(days=index)
+        results.append(
+            VisitorsByDayRead(
+                day=current_day.isoformat(),
+                visitors=counts.get(current_day.isoformat(), 0),
+            )
+        )
+    return results
 
 
 @router.get("/export")

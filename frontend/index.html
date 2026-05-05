@@ -210,6 +210,44 @@
       <div id="recLoading" class="text-center text-sm text-[#00FF88] mt-4 hidden">LOADING...</div>
     </section>
 
+    <section id="campaign-banner-section" class="mb-12 hidden">
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-xl font-black neon-text-pink tracking-wider">📡 LIVE CAMPAIGN</h2>
+        <span class="text-[10px] font-mono border border-[#FF2D75] px-2 py-1 text-[#FF2D75]">SMART PLACEMENT</span>
+      </div>
+      <div id="campaign-banner" class="neon-card overflow-hidden"></div>
+    </section>
+
+    <section id="recently-viewed-section" class="mb-12 hidden">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-xl font-black neon-text-green tracking-wider">🧠 RECENTLY VIEWED</h2>
+          <p class="text-[11px] text-[#00D4FF] font-mono mt-1">Products this session interacted with most recently.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="scrollSlider('recently-viewed', -280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">←</button>
+          <button onclick="scrollSlider('recently-viewed', 280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">→</button>
+        </div>
+      </div>
+      <div id="recently-viewed-slider" class="slider-container"><div id="recently-viewed-track" class="slider-track"></div></div>
+      <div id="recentlyViewedLoading" class="text-center text-sm text-[#00FF88] mt-4 hidden">LOADING SESSION HISTORY...</div>
+    </section>
+
+    <section id="suggested-products-section" class="mb-12 hidden">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-xl font-black neon-text-blue tracking-wider">🤖 SUGGESTED FOR YOU</h2>
+          <p class="text-[11px] text-[#FF2D75] font-mono mt-1">ML-ranked products matched to this session's category, price, and attribute preferences.</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="scrollSlider('suggested-products', -280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">←</button>
+          <button onclick="scrollSlider('suggested-products', 280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">→</button>
+        </div>
+      </div>
+      <div id="suggested-products-slider" class="slider-container"><div id="suggested-products-track" class="slider-track"></div></div>
+      <div id="suggestedProductsLoading" class="text-center text-sm text-[#00FF88] mt-4 hidden">RANKING PRODUCTS WITH ML...</div>
+    </section>
+
     <!-- All Products -->
     <section>
       <h2 class="text-xl font-black neon-text-pink tracking-wider mb-4 pb-1 border-b border-[#FF2D75] inline-block">ALL PRODUCTS</h2>
@@ -219,6 +257,7 @@
     </section>
   </main>
 
+  <script src="tracker.js"></script>
   <script>
     // ========== DATA ==========
     const allProducts = [];
@@ -237,6 +276,16 @@
     let currentCategory = 'all';
     let currentSort = 'default';
     let totalProducts = 0;
+    let recentlyViewedProducts = [];
+    let suggestedProducts = [];
+    let activeCampaignPlacement = null;
+
+    function getStoreApiBaseUrl() {
+      if (window.NEON_API_BASE_URL) return window.NEON_API_BASE_URL.replace(/\/$/, '');
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:10000';
+      return 'https://senior-project-website-add-optimizer.onrender.com';
+    }
 
     // ========== SEPET ==========
     function getCart() { return JSON.parse(localStorage.getItem('neon_cart') || '[]'); }
@@ -252,13 +301,44 @@
     function saveFavorites(favs) { localStorage.setItem('neon_favorites', JSON.stringify(favs)); }
     function isFavorite(productId) { return getFavorites().includes(productId); }
     
+    function buildProductTrackingMetadata(product) {
+      const attributes = product?.attributes || {};
+      const availableAttributes = {};
+      Object.entries(attributes).forEach(([key, value]) => {
+        availableAttributes[key] = Array.isArray(value) ? [...value] : value;
+      });
+      return {
+        product_id: product?.id ?? null,
+        product_name: product?.name ?? null,
+        category: product?.category ?? null,
+        category_name: product?.categoryName ?? null,
+        price: product?.price ?? null,
+        discount: product?.discount ?? 0,
+        stock: product?.stock ?? null,
+        available_attributes: availableAttributes
+      };
+    }
+
+    function trackCatalogInteraction(element, product, extraMetadata = {}) {
+      if (!window.tracker?.track || !product) return;
+      tracker.track('click', element, {
+        metadata: {
+          ...buildProductTrackingMetadata(product),
+          ...extraMetadata
+        }
+      });
+    }
+
     function toggleFavorite(productId) {
       let favs = getFavorites();
+      const product = allProducts.find(p => p.id === productId);
       if (favs.includes(productId)) {
         favs = favs.filter(id => id !== productId);
+        trackCatalogInteraction('remove-favorite', product, { source: 'home', favorites_count: favs.length });
         showToast('💔 Removed from favorites');
       } else {
         favs.push(productId);
+        trackCatalogInteraction('add-favorite', product, { source: 'home', favorites_count: favs.length });
         showToast('💖 Added to favorites');
       }
       saveFavorites(favs);
@@ -304,6 +384,11 @@
       if (existing) existing.quantity++;
       else cart.push({ id: productId, name: productName, price: product.price, image: product.image, quantity: 1 });
       saveCart(cart);
+      trackCatalogInteraction('add-to-cart', product, {
+        source: 'home',
+        quantity: 1,
+        cart_size_after_add: cart.reduce((sum, item) => sum + item.quantity, 0)
+      });
       showToast(`🛒 ${productName} added to cart`);
     }
 
@@ -358,7 +443,11 @@
       `;
     }
 
-    function goToProduct(id) { window.location.href = `product.html?id=${id}`; }
+    function goToProduct(id) {
+      const product = allProducts.find(p => p.id === id);
+      trackCatalogInteraction('open-product', product, { source: 'home' });
+      window.location.href = `product.html?id=${id}`;
+    }
     function scrollSlider(sliderName, amount) { 
       const slider = document.getElementById(`${sliderName}-slider`); 
       if (slider) slider.scrollBy({ left: amount, behavior: 'smooth' }); 
@@ -366,7 +455,7 @@
 
     // ========== DATA LOADING ==========
     async function fetchProducts() {
-      const response = await fetch('data/products_updated.json');
+      const response = await fetch('data/products.json');
       const products = await response.json();
       allProducts.splice(0, allProducts.length, ...products);
     }
@@ -405,6 +494,197 @@
       recTrack.innerHTML = recommended.map(p => renderProductCard(p)).join('');
       recLoading.classList.add('hidden');
       updateAllFavoriteButtons();
+    }
+
+    function renderCampaignBanner(placement) {
+      const banner = document.getElementById('campaign-banner');
+      const section = document.getElementById('campaign-banner-section');
+      if (!banner || !section || !placement) return;
+
+      banner.innerHTML = `
+        <div class="grid gap-0 md:grid-cols-[1.4fr_0.6fr]">
+          <div class="p-6 md:p-8 bg-[linear-gradient(135deg,rgba(255,45,117,0.15),rgba(0,212,255,0.08))]">
+            <div class="text-[10px] font-mono text-[#00D4FF] mb-2">${placement.campaign_name}</div>
+            <h3 class="text-2xl md:text-3xl font-black text-[#00FF88] leading-tight">${placement.title}</h3>
+            <p class="mt-3 text-sm md:text-base text-[#00D4FF] font-mono leading-relaxed">${placement.content}</p>
+            <div class="mt-5 flex flex-wrap gap-3">
+              <a href="offers.html" onclick="handleCampaignClick(event)" class="retro-btn-neon px-4 py-2 text-xs">SHOP CAMPAIGN</a>
+              <span class="border border-[#00FF88] px-3 py-2 text-[10px] font-mono text-[#00FF88]">PLACEMENT: HOME</span>
+            </div>
+          </div>
+          <div class="min-h-[220px] border-t border-[#00FF88] md:border-l md:border-t-0">
+            ${placement.image_url ? `<img src="${placement.image_url}" alt="${placement.title}" class="h-full w-full object-cover">` : `
+              <div class="flex h-full items-center justify-center bg-[radial-gradient(circle_at_top,rgba(0,255,136,0.18),transparent_60%)] p-6">
+                <div class="text-center">
+                  <div class="text-5xl mb-3">⚡</div>
+                  <div class="text-sm font-black text-[#FF2D75] tracking-[0.25em]">NEON PROMO</div>
+                </div>
+              </div>
+            `}
+          </div>
+        </div>
+      `;
+      section.classList.remove('hidden');
+    }
+
+    async function handleCampaignClick(event) {
+      if (!activeCampaignPlacement?.impression_id || !window.tracker?.getSessionId) return;
+
+      try {
+        const sessionId = await window.tracker.getSessionId();
+        fetch(`${getStoreApiBaseUrl()}/ads/impressions/${activeCampaignPlacement.impression_id}/click`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+          keepalive: true
+        }).catch(() => {});
+      } catch (_) {
+        return;
+      }
+    }
+
+    async function loadCampaignPlacement() {
+      const section = document.getElementById('campaign-banner-section');
+      if (!section || !window.tracker?.getSessionId) return;
+
+      try {
+        const sessionId = await window.tracker.getSessionId();
+        const query = sessionId ? `?page=home&session_id=${sessionId}` : '?page=home';
+        const response = await fetch(`${getStoreApiBaseUrl()}/ads/placement${query}`);
+        if (!response.ok) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        const placement = await response.json();
+        if (!placement) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        activeCampaignPlacement = placement;
+        renderCampaignBanner(placement);
+      } catch (_) {
+        section.classList.add('hidden');
+      }
+    }
+
+    async function loadRecentlyViewed() {
+      const section = document.getElementById('recently-viewed-section');
+      const track = document.getElementById('recently-viewed-track');
+      const loading = document.getElementById('recentlyViewedLoading');
+      if (!section || !track || !loading || !window.tracker?.getSessionId) return;
+
+      loading.classList.remove('hidden');
+      try {
+        const sessionId = await window.tracker.getSessionId();
+        if (!sessionId) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        const response = await fetch(`${getStoreApiBaseUrl()}/recommendations/session-recently-viewed?session_id=${sessionId}&limit=12`);
+        if (!response.ok) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        const items = await response.json();
+        const normalized = items
+          .map(item => allProducts.find(product => product.id === item.product_id) || {
+            id: item.product_id,
+            name: item.product_name,
+            category: item.category,
+            categoryName: item.category_name || catNames[item.category] || item.category,
+            price: item.price || 0,
+            image: item.image || 'assets/products/fallbacks/fallback-electronics.svg',
+            discount: 0,
+            stock: 0
+          })
+          .filter(Boolean);
+
+        const uniqueProducts = [];
+        const seen = new Set();
+        normalized.forEach(product => {
+          if (!seen.has(product.id)) {
+            seen.add(product.id);
+            uniqueProducts.push(product);
+          }
+        });
+
+        recentlyViewedProducts = uniqueProducts;
+        if (!recentlyViewedProducts.length) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        track.innerHTML = recentlyViewedProducts.map(product => renderProductCard(product)).join('');
+        section.classList.remove('hidden');
+        updateAllFavoriteButtons();
+      } catch (_) {
+        section.classList.add('hidden');
+      } finally {
+        loading.classList.add('hidden');
+      }
+    }
+
+    async function loadSuggestedProducts() {
+      const section = document.getElementById('suggested-products-section');
+      const track = document.getElementById('suggested-products-track');
+      const loading = document.getElementById('suggestedProductsLoading');
+      if (!section || !track || !loading || !window.tracker?.getSessionId) return;
+
+      loading.classList.remove('hidden');
+      try {
+        const sessionId = await window.tracker.getSessionId();
+        if (!sessionId) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        const response = await fetch(`${getStoreApiBaseUrl()}/recommendations/public-suggested-products?session_id=${sessionId}&limit=12&exclude_viewed=true`);
+        if (!response.ok) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        const items = await response.json();
+        const normalized = items
+          .map(item => allProducts.find(product => product.id === item.product_id) || {
+            id: item.product_id,
+            name: item.name,
+            category: item.category,
+            categoryName: item.category_name || catNames[item.category] || item.category,
+            price: item.price || 0,
+            image: item.image || 'assets/products/fallbacks/fallback-electronics.svg',
+            discount: 0,
+            stock: 0
+          })
+          .filter(Boolean);
+
+        const uniqueProducts = [];
+        const seen = new Set();
+        normalized.forEach(product => {
+          if (!seen.has(product.id)) {
+            seen.add(product.id);
+            uniqueProducts.push(product);
+          }
+        });
+
+        suggestedProducts = uniqueProducts;
+        if (!suggestedProducts.length) {
+          section.classList.add('hidden');
+          return;
+        }
+
+        track.innerHTML = suggestedProducts.map(product => renderProductCard(product)).join('');
+        section.classList.remove('hidden');
+        updateAllFavoriteButtons();
+      } catch (_) {
+        section.classList.add('hidden');
+      } finally {
+        loading.classList.add('hidden');
+      }
     }
 
     function loadProducts() {
@@ -517,6 +797,9 @@
       await fetchProducts();
       loadCategories();
       loadRecommendations();
+      await loadCampaignPlacement();
+      await loadRecentlyViewed();
+      await loadSuggestedProducts();
       loadProducts();
       saveCart(getCart());
       updateFavoritesBadge();

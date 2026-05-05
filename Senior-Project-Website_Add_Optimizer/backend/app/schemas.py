@@ -81,6 +81,75 @@ class EventRead(EventBase):
     metadata: dict | None = Field(default=None, validation_alias="metadata_json")
 
 
+class SessionProductInteractionRead(BaseModel):
+    """Session-scoped product interaction details used for recently viewed recommendations."""
+
+    product_id: int
+    product_name: str
+    category: str
+    category_name: str | None = None
+    price: float | None = None
+    image: str | None = None
+    last_interaction_at: datetime
+    interaction_count: int
+    last_event_type: str
+    last_element: str | None = None
+
+
+class SessionProfileRead(BaseModel):
+    """Aggregated product-interest summary for a visitor session."""
+
+    session_id: int
+    total_events: int
+    total_product_interactions: int
+    unique_products: int
+    top_category: str | None = None
+    top_category_interactions: int = 0
+
+
+class PreferenceStatRead(BaseModel):
+    """Counted preference value used in session preference summaries."""
+
+    value: str
+    count: int
+
+
+class SessionPreferenceProfileRead(BaseModel):
+    """Session-level preference profile derived from tracked product interactions."""
+
+    session_id: int
+    top_category: str | None = None
+    category_counts: dict[str, int]
+    average_price: float | None = None
+    min_price: float | None = None
+    max_price: float | None = None
+    preferred_brands: list[PreferenceStatRead]
+    preferred_colors: list[PreferenceStatRead]
+    preferred_sizes: list[PreferenceStatRead]
+    preferred_storage: list[PreferenceStatRead]
+    preferred_skin_types: list[PreferenceStatRead]
+
+
+class SuggestedProductRead(BaseModel):
+    """Recommended storefront product ranked for a visitor session."""
+
+    product_id: int
+    name: str
+    category: str
+    category_name: str
+    price: float
+    image: str
+    score: float
+    matched_signals: list[str]
+
+
+class VisitorsByDayRead(BaseModel):
+    """Daily page-view counts used by the dashboard visitors chart."""
+
+    day: str
+    visitors: int
+
+
 class CampaignBase(BaseModel):
     """Shared campaign fields."""
 
@@ -143,6 +212,25 @@ class AdRead(AdBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+
+
+class AdPlacementRead(BaseModel):
+    """Public storefront ad placement payload."""
+
+    ad_id: int
+    campaign_id: int
+    campaign_name: str
+    title: str
+    content: str
+    image_url: str | None = None
+    placement_page: str
+    impression_id: int | None = None
+
+
+class ImpressionClickPayload(BaseModel):
+    """Public storefront payload for marking an impression as clicked."""
+
+    session_id: int | None = None
 
 
 class ImpressionBase(BaseModel):
