@@ -10,267 +10,194 @@ from pathlib import Path
 from typing import Any
 
 
-BRAND_STOPWORDS = [
-    "levi's",
-    "levis",
-    "nike",
-    "adidas",
-    "apple",
-    "samsung",
-    "sony",
-    "dell",
-    "hp",
-    "loreal",
-    "l'oreal",
-    "maybelline",
-    "zara",
-    "h&m",
-    "dyson",
-    "bose",
-    "garmin",
-    "fitbit",
-    "canon",
-    "google",
-    "amazon",
-    "kitchenaid",
-    "breville",
-    "cuisinart",
-    "keurig",
-    "ninja",
-    "instant pot",
-    "under armour",
-    "north face",
-    "patagonia",
-    "columbia",
-    "puma",
-    "uniqlo",
-    "gap",
-    "old navy",
-    "lululemon",
-]
-
-PRODUCT_TYPE_QUERIES = {
-    "t-shirt": "plain t shirt product photography isolated",
-    "t shirt": "plain t shirt product photography isolated",
-    "tee": "plain t shirt product photography isolated",
-    "jeans": "blue denim jeans folded product photography",
-    "denim": "blue denim jeans folded product photography",
-    "shirt": "shirt product photography isolated",
-    "hoodie": "hoodie product photography isolated",
-    "sweatshirt": "sweatshirt product photography isolated",
-    "jacket": "jacket product photography isolated",
-    "dress": "dress product photography studio",
-    "sneakers": "sneakers product photography isolated",
-    "sneaker": "sneakers product photography isolated",
-    "shoes": "shoes product photography isolated",
-    "shoe": "shoes product photography isolated",
-    "air force": "sneakers product photography isolated",
-    "ultraboost": "running shoes product photography isolated",
-    "pegasus": "running shoes product photography isolated",
-    "metcon": "training shoes product photography isolated",
-    "watch": "watch product photography isolated",
-    "smartwatch": "smartwatch product photography isolated",
-    "pixelbook": "laptop product photography isolated",
-    "iphone": "smartphone product photography isolated",
-    "pixel": "smartphone product photography isolated",
-    "phone": "smartphone product photography isolated",
-    "smartphone": "smartphone product photography isolated",
-    "macbook": "laptop product photography isolated",
-    "laptop": "laptop product photography isolated",
-    "headphones": "headphones product photography isolated",
-    "headphone": "headphones product photography isolated",
-    "quietcomfort": "headphones product photography isolated",
-    "earbuds": "wireless earbuds product photography isolated",
-    "airpods": "wireless earbuds product photography isolated",
-    "speaker": "speaker product photography isolated",
-    "soundbar": "soundbar product photography isolated",
-    "camera": "camera product photography isolated",
-    "monitor": "computer monitor product photography isolated",
-    "tablet": "tablet product photography isolated",
-    "ipad": "tablet product photography isolated",
-    "tv": "television product photography isolated",
-    "book": "book cover product photography",
-    "novel": "book cover product photography",
-    "makeup": "makeup cosmetics product photography",
-    "lipstick": "lipstick cosmetics product photography",
-    "concealer": "makeup cosmetics product photography",
-    "perfume": "perfume bottle product photography isolated",
-    "serum": "skincare serum bottle product photography",
-    "cream": "skincare cream product photography",
-    "cleanser": "facial cleanser product photography",
-    "sunscreen": "sunscreen skincare product photography",
-    "mascara": "mascara cosmetics product photography",
-    "hair dryer": "hair dryer product photography isolated",
-    "ball": "sports ball product photography",
-    "basketball": "basketball product photography isolated",
-    "football": "soccer ball product photography isolated",
-    "yoga": "yoga mat product photography",
-    "mat": "yoga mat product photography",
-    "dumbbells": "dumbbells product photography isolated",
-    "kettlebell": "kettlebell product photography isolated",
-    "bike": "exercise bike product photography isolated",
-    "racket": "tennis racket product photography isolated",
-    "cooler": "portable cooler product photography isolated",
-    "tumbler": "insulated tumbler product photography isolated",
-    "bottle": "water bottle product photography isolated",
-    "vacuum": "vacuum cleaner product photography isolated",
-    "blender": "kitchen blender product photography isolated",
-    "microwave": "microwave oven product photography isolated",
-    "coffee maker": "coffee maker product photography isolated",
-    "espresso": "espresso machine product photography isolated",
-    "mixer": "stand mixer product photography isolated",
-    "airfryer": "air fryer product photography isolated",
-    "oven": "countertop oven product photography isolated",
-    "grill": "electric grill product photography isolated",
-    "toothbrush": "electric toothbrush product photography isolated",
-    "charger": "portable charger product photography isolated",
-    "mouse": "computer mouse product photography isolated",
-    "router": "wifi router product photography isolated",
-    "doorbell": "video doorbell product photography isolated",
-    "switch": "portable game console product photography isolated",
-    "playstation": "game console product photography isolated",
-    "kindle": "e reader product photography isolated",
-}
-
-CATEGORY_FALLBACK_QUERIES = {
-    "electronics": "modern electronics device product photography isolated",
-    "clothing": "fashion clothing item product photography isolated",
-    "beauty": "cosmetics product photography isolated",
-    "home-appliances": "home appliance product photography isolated",
-    "books": "book product photography",
-    "sports": "sports equipment product photography isolated",
-}
-
-QUALITY_RULES = {
-    "blue denim jeans folded product photography": {
-        "required": ["jeans", "denim", "pants"],
-        "banned": ["shoe", "sneaker", "footwear", "boot"],
-    },
-    "plain t shirt product photography isolated": {
-        "required": ["shirt", "t shirt", "tshirt", "tee"],
-        "banned": ["shoe", "sneaker", "phone", "laptop"],
-    },
-    "shirt product photography isolated": {
-        "required": ["shirt", "clothing", "apparel"],
-        "banned": ["shoe", "sneaker", "phone"],
-    },
-    "hoodie product photography isolated": {
-        "required": ["hoodie", "sweatshirt"],
-        "banned": ["shoe", "sneaker", "phone"],
-    },
-    "sweatshirt product photography isolated": {
-        "required": ["sweatshirt", "shirt", "clothing"],
-        "banned": ["shoe", "sneaker", "phone"],
-    },
-    "jacket product photography isolated": {
-        "required": ["jacket", "coat"],
-        "banned": ["shoe", "sneaker", "phone"],
-    },
-    "dress product photography studio": {
-        "required": ["dress", "gown"],
-        "banned": ["shoe", "sneaker", "phone"],
-    },
-    "sneakers product photography isolated": {
-        "required": ["shoe", "shoes", "sneaker", "sneakers", "footwear"],
-        "banned": ["jeans", "pants", "shirt", "phone"],
-    },
-    "running shoes product photography isolated": {
-        "required": ["shoe", "shoes", "sneaker", "sneakers", "footwear"],
-        "banned": ["jeans", "pants", "shirt", "phone"],
-    },
-    "training shoes product photography isolated": {
-        "required": ["shoe", "shoes", "sneaker", "sneakers", "footwear"],
-        "banned": ["jeans", "pants", "shirt", "phone"],
-    },
-    "smartphone product photography isolated": {
-        "required": ["phone", "smartphone", "mobile"],
-        "banned": ["headphone", "headphones", "laptop", "tablet"],
-    },
-    "laptop product photography isolated": {
-        "required": ["laptop", "computer", "notebook"],
-        "banned": ["phone", "smartphone", "tablet", "headphones"],
-    },
-    "headphones product photography isolated": {
-        "required": ["headphone", "headphones", "headset"],
-        "banned": ["phone", "smartphone", "laptop"],
-    },
-    "smartwatch product photography isolated": {
-        "required": ["watch", "smartwatch"],
-        "banned": ["phone", "smartphone", "laptop"],
-    },
-    "wireless earbuds product photography isolated": {
-        "required": ["earbuds", "earphones", "headphones"],
-        "banned": ["phone", "smartphone", "laptop"],
-    },
-    "book product photography": {
-        "required": ["book", "books"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "book cover product photography": {
-        "required": ["book", "books", "cover"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "perfume bottle product photography isolated": {
-        "required": ["perfume", "bottle", "fragrance"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "lipstick cosmetics product photography": {
-        "required": ["lipstick", "cosmetic", "makeup"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "makeup cosmetics product photography": {
-        "required": ["makeup", "cosmetic", "cosmetics"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "skincare cream product photography": {
-        "required": ["cream", "skincare", "cosmetic"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "skincare serum bottle product photography": {
-        "required": ["serum", "skincare", "bottle"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "cosmetics product photography isolated": {
-        "required": ["cosmetic", "cosmetics", "makeup", "skincare"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "hair dryer product photography isolated": {
-        "required": ["hair", "dryer"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "basketball product photography isolated": {
-        "required": ["basketball", "ball"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "soccer ball product photography isolated": {
-        "required": ["football", "soccer", "ball"],
-        "banned": ["shoe", "phone", "laptop"],
-    },
-    "yoga mat product photography": {
-        "required": ["yoga", "mat"],
-        "banned": ["phone", "laptop"],
-    },
-}
-
 PEXELS_SEARCH_URL = "https://api.pexels.com/v1/search"
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY") or "FkLNr8WKUoKAeNjEc6wVMreMvJom3UdAUeMhYNbGd0y5NuPqUe6nJTcJ"
 
 REQUEST_DELAY_SECONDS = 0.3
 REQUEST_TIMEOUT_SECONDS = 20
-RESULTS_PER_PAGE = 10
+RESULTS_PER_PAGE = 30
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PRODUCTS_PATH = REPO_ROOT / "frontend" / "data" / "products.json"
-BACKUP_PATH = REPO_ROOT / "frontend" / "data" / "products_backup.json"
+DATA_DIR = REPO_ROOT / "frontend" / "data"
+PRODUCTS_PATH = DATA_DIR / "products.json"
+BACKUP_PATH = DATA_DIR / "products_backup.json"
+QUERY_OVERRIDES_PATH = DATA_DIR / "product_image_queries.json"
+IMAGE_OVERRIDES_PATH = DATA_DIR / "product_image_overrides.json"
+
+TYPE_RULES = {
+    "phone": {
+        "patterns": [r"\biphone\b", r"\bpixel\s+6\b", r"\bsmartphone\b", r"\bphone\b"],
+        "queries": ["smartphone product photography isolated", "mobile phone product photography studio"],
+        "required": ["phone", "smartphone", "mobile"],
+        "banned": ["headphone", "headphones", "earbuds", "laptop", "camera"],
+    },
+    "headphones": {
+        "patterns": [r"\bheadphones?\b", r"\bquietcomfort\b", r"\bheadset\b"],
+        "queries": ["headphones product photography isolated", "wireless headphones product photography studio"],
+        "required": ["headphone", "headphones", "earbuds", "earphone", "headset"],
+        "banned": ["phone", "smartphone", "laptop"],
+    },
+    "earbuds": {
+        "patterns": [r"\bearbuds?\b", r"\bearphones?\b", r"\bairpods\b"],
+        "queries": ["wireless earbuds product photography isolated", "earbuds product photography studio"],
+        "required": ["earbuds", "earphone", "earphones", "headphones"],
+        "banned": ["phone", "smartphone", "laptop"],
+    },
+    "laptop": {
+        "patterns": [r"\bmacbook\b", r"\bpixelbook\b", r"\blaptop\b", r"\bnotebook\b"],
+        "queries": ["laptop product photography isolated", "notebook computer product photography studio"],
+        "required": ["laptop", "computer", "notebook"],
+        "banned": ["phone", "smartphone", "tablet", "headphones"],
+    },
+    "jeans": {
+        "patterns": [r"\bjeans\b", r"\bdenim\b", r"\bpants\b", r"\btrousers\b"],
+        "queries": ["blue denim jeans product photography", "folded jeans product photography"],
+        "required": ["jeans", "denim", "pants", "trousers"],
+        "banned": ["shoe", "shoes", "sneaker", "sneakers", "footwear", "boot"],
+    },
+    "sneakers": {
+        "patterns": [r"\bsneakers?\b", r"\bshoes?\b", r"\bair\s+force\b", r"\bultraboost\b", r"\bpegasus\b", r"\bmetcon\b"],
+        "queries": ["sneakers product photography isolated", "running shoes product photography isolated"],
+        "required": ["shoe", "shoes", "sneaker", "sneakers", "footwear"],
+        "banned": ["jeans", "denim", "pants", "shirt"],
+    },
+    "t-shirt": {
+        "patterns": [r"\bt[\s-]?shirt\b", r"\btee\b"],
+        "queries": ["plain t shirt product photography isolated", "cotton t shirt product photography studio"],
+        "required": ["shirt", "t shirt", "tshirt", "tee"],
+        "banned": ["shoe", "sneaker", "phone", "laptop"],
+    },
+    "shirt": {
+        "patterns": [r"\bshirt\b", r"\bpolo\b"],
+        "queries": ["shirt product photography isolated", "folded shirt product photography studio"],
+        "required": ["shirt", "clothing", "apparel"],
+        "banned": ["shoe", "sneaker", "phone"],
+    },
+    "hoodie": {
+        "patterns": [r"\bhoodie\b"],
+        "queries": ["hoodie product photography isolated", "fleece hoodie product photography studio"],
+        "required": ["hoodie", "sweatshirt"],
+        "banned": ["shoe", "sneaker", "phone"],
+    },
+    "jacket": {
+        "patterns": [r"\bjacket\b", r"\bcoat\b"],
+        "queries": ["jacket product photography isolated", "outerwear jacket product photography studio"],
+        "required": ["jacket", "coat"],
+        "banned": ["shoe", "sneaker", "phone"],
+    },
+    "dress": {
+        "patterns": [r"\bdress\b"],
+        "queries": ["dress product photography studio", "summer dress product photography isolated"],
+        "required": ["dress", "gown"],
+        "banned": ["shoe", "sneaker", "phone"],
+    },
+    "watch": {
+        "patterns": [r"\bwatch\b", r"\bsmartwatch\b", r"\bforerunner\b", r"\bfenix\b", r"\bversa\b", r"\binspire\b", r"\bluxe\b", r"\bvantage\b"],
+        "queries": ["watch product photography isolated", "smartwatch product photography studio"],
+        "required": ["watch", "smartwatch"],
+        "banned": ["phone", "smartphone", "laptop"],
+    },
+    "perfume": {
+        "patterns": [r"\bperfume\b", r"\bfragrance\b", r"\bcologne\b"],
+        "queries": ["perfume bottle product photography isolated", "fragrance bottle product photography studio"],
+        "required": ["perfume", "bottle", "fragrance"],
+        "banned": ["shoe", "phone", "laptop"],
+    },
+    "lipstick": {
+        "patterns": [r"\blipstick\b", r"\blip\s+treatment\b"],
+        "queries": ["lipstick cosmetics product photography", "lipstick product photography isolated"],
+        "required": ["lipstick", "cosmetic", "makeup"],
+        "banned": ["shoe", "phone", "laptop"],
+    },
+    "cream": {
+        "patterns": [r"\bcream\b", r"\bmoistur", r"\blotion\b"],
+        "queries": ["skincare cream product photography", "face cream jar product photography"],
+        "required": ["cream", "skincare", "cosmetic"],
+        "banned": ["shoe", "phone", "laptop"],
+    },
+    "serum": {
+        "patterns": [r"\bserum\b", r"\bnight\s+repair\b", r"\brecovery\b"],
+        "queries": ["skincare serum bottle product photography", "face serum product photography studio"],
+        "required": ["serum", "skincare", "bottle"],
+        "banned": ["shoe", "phone", "laptop"],
+    },
+    "book": {
+        "patterns": [r"\bbook\b", r"\bnovel\b", r"\bdune\b", r"\b1984\b", r"\bharry\s+potter\b", r"\bda\s+vinci\b", r"\bhobbit\b", r"\bmockingbird\b"],
+        "queries": ["book product photography", "books reading product photography"],
+        "required": ["book", "books", "novel", "reading"],
+        "banned": ["laptop", "phone", "perfume", "shoes"],
+    },
+    "yoga_mat": {
+        "patterns": [r"\byoga\s+mat\b", r"\bmat\b"],
+        "queries": ["yoga mat product photography", "rolled yoga mat product photography"],
+        "required": ["yoga mat", "yoga", "mat"],
+        "banned": ["ultimate", "phone", "laptop", "book"],
+    },
+    "ball": {
+        "patterns": [r"\bbasketball\b", r"\bfootball\b", r"\bsoccer\b", r"\bballs?\b"],
+        "queries": ["sports ball product photography isolated", "basketball soccer ball product photography"],
+        "required": ["ball", "basketball", "football", "soccer"],
+        "banned": ["shoe", "phone", "laptop"],
+    },
+    "camera": {
+        "patterns": [r"\bcamera\b", r"\beos\b", r"\bgopro\b"],
+        "queries": ["camera product photography isolated", "digital camera product photography studio"],
+        "required": ["camera"],
+        "banned": ["phone", "laptop", "headphones"],
+    },
+    "refrigerator": {
+        "patterns": [r"\brefrigerator\b", r"\bfridge\b"],
+        "queries": ["refrigerator product photography isolated", "modern fridge product photography"],
+        "required": ["refrigerator", "fridge"],
+        "banned": ["phone", "shoe", "book"],
+    },
+    "washing_machine": {
+        "patterns": [r"\bwashing\s+machine\b", r"\bwasher\b"],
+        "queries": ["washing machine product photography isolated", "front load washer product photography"],
+        "required": ["washing", "washer", "machine"],
+        "banned": ["phone", "shoe", "book"],
+    },
+    "blender": {
+        "patterns": [r"\bblender\b"],
+        "queries": ["kitchen blender product photography isolated", "countertop blender product photography"],
+        "required": ["blender"],
+        "banned": ["phone", "shoe", "book"],
+    },
+    "coffee_maker": {
+        "patterns": [r"\bcoffee\s+maker\b", r"\bcoffee\s+center\b", r"\bk-elite\b", r"\bk-mini\b", r"\bflexbrew\b"],
+        "queries": ["coffee maker product photography isolated", "coffee machine product photography studio"],
+        "required": ["coffee", "maker", "machine"],
+        "banned": ["phone", "shoe", "book"],
+    },
+    "microwave": {
+        "patterns": [r"\bmicrowave\b"],
+        "queries": ["microwave oven product photography isolated", "countertop microwave product photography"],
+        "required": ["microwave", "oven"],
+        "banned": ["phone", "shoe", "book"],
+    },
+}
+
+CATEGORY_FALLBACK_QUERIES = {
+    "electronics": ["modern electronics device product photography isolated", "consumer electronics product photography"],
+    "clothing": ["fashion clothing item product photography isolated", "apparel product photography studio"],
+    "beauty": ["cosmetics product photography isolated", "beauty product photography studio"],
+    "home-appliances": ["home appliance product photography isolated", "kitchen appliance product photography"],
+    "books": ["book product photography", "books reading product photography"],
+    "sports": ["sports equipment product photography isolated", "fitness equipment product photography"],
+}
+
+
+def load_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
 def load_products() -> list[dict[str, Any]]:
-    with PRODUCTS_PATH.open("r", encoding="utf-8") as file:
-        data = json.load(file)
-
+    data = load_json(PRODUCTS_PATH, [])
     if not isinstance(data, list):
         raise ValueError("products.json must contain a list of products")
-
     return data
 
 
@@ -285,28 +212,36 @@ def create_backup() -> Path:
     return BACKUP_PATH
 
 
-def normalize_for_matching(value: str) -> str:
+def normalize_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
-def contains_product_type(name: str, product_type: str) -> bool:
-    normalized_type = normalize_for_matching(product_type)
-    return bool(re.search(rf"(^|\s){re.escape(normalized_type)}($|\s)", name))
+def has_term(text: str, term: str) -> bool:
+    normalized = normalize_text(term)
+    return bool(re.search(rf"(^|\s){re.escape(normalized)}($|\s)", text))
 
 
-def get_keyword(product: dict[str, Any]) -> str:
-    cleaned_name = normalize_for_matching(str(product.get("name", "")))
-    for brand in BRAND_STOPWORDS:
-        normalized_brand = normalize_for_matching(brand)
-        cleaned_name = re.sub(rf"(^|\s){re.escape(normalized_brand)}($|\s)", " ", cleaned_name)
-    cleaned_name = " ".join(cleaned_name.split())
+def detect_product_type(product: dict[str, Any]) -> str | None:
+    name = normalize_text(str(product.get("name", "")))
+    for product_type, rule in TYPE_RULES.items():
+        if any(re.search(pattern, name) for pattern in rule["patterns"]):
+            return product_type
+    if product.get("category") == "books":
+        return "book"
+    return None
 
-    for product_type, query in PRODUCT_TYPE_QUERIES.items():
-        if contains_product_type(cleaned_name, product_type):
-            return query
 
-    category = str(product.get("category", ""))
-    return CATEGORY_FALLBACK_QUERIES.get(category, "product photography isolated")
+def get_auto_queries(product: dict[str, Any], product_type: str | None) -> list[str]:
+    if product_type:
+        return list(TYPE_RULES[product_type]["queries"])[:2]
+    return CATEGORY_FALLBACK_QUERIES.get(str(product.get("category", "")), ["product photography isolated"])[:2]
+
+
+def get_queries(product: dict[str, Any], query_overrides: dict[str, Any], product_type: str | None) -> list[str]:
+    override = query_overrides.get(str(product.get("id")))
+    if isinstance(override, list) and override:
+        return [str(query) for query in override[:2]]
+    return get_auto_queries(product, product_type)
 
 
 class PexelsClient:
@@ -320,19 +255,17 @@ class PexelsClient:
     def wait_if_needed(self) -> None:
         if not self.last_request_at:
             return
-
         elapsed = time.monotonic() - self.last_request_at
         if elapsed < REQUEST_DELAY_SECONDS:
             time.sleep(REQUEST_DELAY_SECONDS - elapsed)
 
-    def search(self, query: str) -> dict[str, Any] | None:
+    def search(self, query: str) -> list[dict[str, Any]]:
+        photos: list[dict[str, Any]] = []
         for orientation in ("square", "landscape"):
-            photo = self.search_with_orientation(query, orientation)
-            if photo:
-                return photo
-        return None
+            photos.extend(self.search_with_orientation(query, orientation))
+        return photos
 
-    def search_with_orientation(self, query: str, orientation: str) -> dict[str, Any] | None:
+    def search_with_orientation(self, query: str, orientation: str) -> list[dict[str, Any]]:
         params = urllib.parse.urlencode(
             {
                 "query": query,
@@ -340,105 +273,142 @@ class PexelsClient:
                 "per_page": RESULTS_PER_PAGE,
             }
         )
-
-        request = urllib.request.Request(
-            f"{PEXELS_SEARCH_URL}?{params}",
-            headers=self.headers,
-        )
+        request = urllib.request.Request(f"{PEXELS_SEARCH_URL}?{params}", headers=self.headers)
 
         self.wait_if_needed()
-
         try:
             with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
                 payload = json.load(response)
         except urllib.error.HTTPError as error:
-            print(f"  HTTP {error.code}; skipped orientation={orientation}")
-            return None
+            print(f"  HTTP {error.code}; skipped query={query} orientation={orientation}")
+            return []
         except urllib.error.URLError as error:
-            print(f"  Request failed; skipped orientation={orientation}: {error.reason}")
-            return None
+            print(f"  Request failed; skipped query={query} orientation={orientation}: {error.reason}")
+            return []
         except json.JSONDecodeError:
-            print(f"  Invalid JSON; skipped orientation={orientation}")
-            return None
+            print(f"  Invalid JSON; skipped query={query} orientation={orientation}")
+            return []
         finally:
             self.last_request_at = time.monotonic()
 
-        photos = payload.get("photos") or []
-        if not photos:
-            return None
-
-        return select_best_photo(query, photos)
+        return payload.get("photos") or []
 
 
-def text_has_term(text: str, term: str) -> bool:
-    normalized_term = normalize_for_matching(term)
-    return bool(re.search(rf"(^|\s){re.escape(normalized_term)}($|\s)", text))
+def image_url(photo: dict[str, Any]) -> str | None:
+    src = photo.get("src") or {}
+    return src.get("large2x") or src.get("large") or src.get("medium")
 
 
 def photo_text(photo: dict[str, Any]) -> str:
+    src = photo.get("src") or {}
     parts = [
         str(photo.get("alt") or ""),
         str(photo.get("url") or ""),
-        str(photo.get("photographer") or ""),
+        " ".join(str(value) for value in src.values()),
     ]
-    return normalize_for_matching(" ".join(parts))
+    return normalize_text(" ".join(parts))
 
 
-def score_photo(query: str, photo: dict[str, Any]) -> int | None:
+def query_terms(query: str) -> list[str]:
+    ignored = {"product", "photography", "isolated", "studio"}
+    return [term for term in normalize_text(query).split() if len(term) > 3 and term not in ignored]
+
+
+def score_photo(
+    photo: dict[str, Any],
+    query: str,
+    product_type: str | None,
+    used_image_urls: set[str],
+    allow_duplicate: bool,
+) -> tuple[int, str] | None:
+    selected_url = image_url(photo)
+    if not selected_url:
+        return None
+
     text = photo_text(photo)
-    rules = QUALITY_RULES.get(query, {})
-    required = rules.get("required", [])
-    banned = rules.get("banned", [])
+    alt = normalize_text(str(photo.get("alt") or ""))
+    required = TYPE_RULES.get(product_type or "", {}).get("required", [])
+    banned = TYPE_RULES.get(product_type or "", {}).get("banned", [])
 
-    if any(text_has_term(text, term) for term in banned):
+    if any(has_term(text, term) for term in banned):
         return None
 
-    matched_required = sum(1 for term in required if text_has_term(text, term))
-    if required and matched_required == 0:
+    required_hits = sum(1 for term in required if has_term(alt, term))
+    if product_type and required and required_hits == 0:
         return None
 
-    score = matched_required * 10
-    for term in query.split():
-        if len(term) > 3 and text_has_term(text, term):
-            score += 1
-
-    width = photo.get("width") or 0
-    height = photo.get("height") or 0
-    if isinstance(width, int) and isinstance(height, int) and width and height:
-        ratio = width / height
-        if 0.8 <= ratio <= 1.4:
-            score += 2
-
-    return score
-
-
-def select_best_photo(query: str, photos: list[dict[str, Any]]) -> dict[str, Any] | None:
-    scored: list[tuple[int, dict[str, Any]]] = []
-    for photo in photos:
-        score = score_photo(query, photo)
-        if score is not None:
-            scored.append((score, photo))
-
-    if not scored:
+    duplicate = selected_url in used_image_urls
+    if duplicate and not allow_duplicate:
         return None
 
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return scored[0][1]
+    score = required_hits * 10
+    score += sum(6 for term in query_terms(query) if has_term(alt, term))
+
+    width = photo.get("width")
+    height = photo.get("height")
+    if isinstance(width, int) and isinstance(height, int):
+        if width >= 1000 and height >= 1000:
+            score += 3
+        if height:
+            ratio = width / height
+            if 0.75 <= ratio <= 1.5:
+                score += 2
+
+    if duplicate:
+        score -= 5
+
+    return score, selected_url
 
 
-def apply_photo(product: dict[str, Any], photo: dict[str, Any]) -> bool:
-    src = photo.get("src") or {}
-    image_url = src.get("large") or src.get("medium")
+def choose_photo(
+    candidates: list[tuple[str, dict[str, Any]]],
+    product_type: str | None,
+    used_image_urls: set[str],
+) -> tuple[dict[str, Any], str, int, str] | None:
+    for allow_duplicate in (False, True):
+        scored: list[tuple[int, dict[str, Any], str, str]] = []
+        for query, photo in candidates:
+            result = score_photo(photo, query, product_type, used_image_urls, allow_duplicate)
+            if result is None:
+                continue
+            score, selected_url = result
+            scored.append((score, photo, query, selected_url))
+        if scored:
+            scored.sort(key=lambda item: item[0], reverse=True)
+            score, photo, query, selected_url = scored[0]
+            return photo, query, score, selected_url
+    return None
 
-    if not image_url:
-        return False
 
-    product["image"] = image_url
-    product["image_source"] = "pexels"
-    product["image_photographer"] = photo.get("photographer")
-    product["image_photographer_url"] = photo.get("photographer_url")
-    product["image_pexels_url"] = photo.get("url")
-    return True
+def apply_photo(product: dict[str, Any], selected_url: str) -> None:
+    product["image"] = selected_url
+    product.pop("variants", None)
+    product.pop("image_source", None)
+    product.pop("image_photographer", None)
+    product.pop("image_photographer_url", None)
+    product.pop("image_pexels_url", None)
+
+
+def report_entry(
+    product: dict[str, Any],
+    product_type: str | None,
+    query: str,
+    image: str | None,
+    alt_text: str,
+    score: int | str,
+    status: str,
+) -> dict[str, Any]:
+    return {
+        "id": product.get("id"),
+        "name": product.get("name"),
+        "category": product.get("category"),
+        "detected_type": product_type or "unknown",
+        "query_used": query,
+        "selected_image": image,
+        "alt_text": alt_text,
+        "score": score,
+        "status": status,
+    }
 
 
 def main() -> None:
@@ -446,54 +416,100 @@ def main() -> None:
         raise SystemExit("PEXELS_API_KEY is required.")
 
     products = load_products()
+    query_overrides = load_json(QUERY_OVERRIDES_PATH, {})
+    image_overrides = load_json(IMAGE_OVERRIDES_PATH, {})
     backup_path = create_backup()
     client = PexelsClient(PEXELS_API_KEY)
-
+    used_image_urls: set[str] = set()
+    report: list[dict[str, Any]] = []
     updated_count = 0
     skipped_count = 0
 
     print(f"Backup created: {backup_path}")
 
     for product in products:
-        product_id = product.get("id")
-        name = product.get("name", "Unknown product")
+        product_id = str(product.get("id"))
         old_image = product.get("image")
+        product_type = detect_product_type(product)
+        queries = get_queries(product, query_overrides, product_type)
 
-        product.pop("variants", None)
+        if isinstance(image_overrides.get(product_id), str):
+            selected_url = image_overrides[product_id]
+            apply_photo(product, selected_url)
+            used_image_urls.add(selected_url)
+            updated_count += 1
+            entry = report_entry(product, product_type, "manual override", selected_url, "manual override", "override", "updated")
+            report.append(entry)
+            print(f"{product_id} | {product.get('name')} | {entry['detected_type']} | manual override | updated")
+            continue
 
-        query = get_keyword(product)
+        candidates: list[tuple[str, dict[str, Any]]] = []
+        for query in queries:
+            for photo in client.search(query):
+                candidates.append((query, photo))
 
-        try:
-            photo = client.search(query)
-            if photo and apply_photo(product, photo):
-                updated_count += 1
-                status = "updated"
-            else:
-                product["image"] = old_image
-                skipped_count += 1
-                status = "skipped"
-        except Exception as error:
+        choice = choose_photo(candidates, product_type, used_image_urls)
+        if choice:
+            photo, query_used, score, selected_url = choice
+            apply_photo(product, selected_url)
+            used_image_urls.add(selected_url)
+            updated_count += 1
+            entry = report_entry(product, product_type, query_used, selected_url, str(photo.get("alt") or ""), score, "updated")
+        else:
             product["image"] = old_image
+            product.pop("variants", None)
+            if isinstance(old_image, str):
+                used_image_urls.add(old_image)
             skipped_count += 1
-            status = f"skipped ({error.__class__.__name__})"
+            entry = report_entry(product, product_type, queries[0] if queries else "", old_image, "", "skipped", "skipped")
 
-        print(f"{product_id} | {name} | {query} | {status}")
+        report.append(entry)
+        print(
+            f"{product_id} | {product.get('name')} | {entry['detected_type']} | "
+            f"{entry['query_used']} | {entry['status']} | score={entry['score']}"
+        )
 
     write_products(products)
 
-    remaining_variants = sum(1 for product in products if "variants" in product)
-    pexels_images = sum(
-        1
-        for product in products
-        if isinstance(product.get("image"), str) and "pexels.com" in product["image"]
-    )
+    duplicates = len(products) - len({product.get("image") for product in products if product.get("image")})
+    missing_image = [product.get("id") for product in products if not product.get("image")]
+    remaining_variants = [product.get("id") for product in products if "variants" in product]
+    non_pexels = [product.get("id") for product in products if "pexels.com" not in str(product.get("image", ""))]
 
     print("=== SUMMARY ===")
-    print(f"Processed: {len(products)}")
-    print(f"Updated: {updated_count}")
-    print(f"Skipped: {skipped_count}")
-    print(f"Pexels images: {pexels_images}")
-    print(f"Remaining variants: {remaining_variants}")
+    print(f"total: {len(products)}")
+    print(f"missing_image: {len(missing_image)}")
+    print(f"remaining_variants: {len(remaining_variants)}")
+    print(f"non_pexels: {len(non_pexels)}")
+    print(f"duplicated_image_count: {duplicates}")
+    print(f"updated_count: {updated_count}")
+    print(f"skipped_count: {skipped_count}")
+
+    important_names = (
+        "Levi's 501 Jeans",
+        "Nike Air Force 1",
+        "Adidas Ultraboost Shoes",
+        "iPhone 14 Pro",
+        "Google Pixel 6 Pro",
+        "MacBook Pro 16-inch",
+        "HP Spectre x360 Laptop",
+        "Sony WH-1000XM4 Headphones",
+        "Yoga Mat",
+        "Dune",
+        "1984",
+        "Harry Potter",
+        "Chanel",
+        "Lipstick",
+        "Cream",
+    )
+    print("=== IMPORTANT SAMPLE ===")
+    for entry in report:
+        name = str(entry["name"])
+        if any(term.lower() in name.lower() for term in important_names):
+            print(
+                f"{entry['id']} | {entry['name']} | {entry['detected_type']} | "
+                f"{entry['query_used']} | {entry['selected_image']} | {entry['alt_text']} | {entry['score']}"
+            )
 
 
 if __name__ == "__main__":
