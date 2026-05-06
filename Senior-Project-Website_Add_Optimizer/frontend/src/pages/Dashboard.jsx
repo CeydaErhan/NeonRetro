@@ -99,6 +99,14 @@ function buildCampaignChartData(campaigns, events) {
   };
 }
 
+function formatDemoValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Not returned";
+  }
+
+  return String(value);
+}
+
 // Shows top-level KPIs and quick trend charts for the dashboard home.
 export default function Dashboard() {
   const [summary, setSummary] = useState(initialSummary);
@@ -108,6 +116,11 @@ export default function Dashboard() {
     data: []
   });
   const [error, setError] = useState("");
+  const [demoPage, setDemoPage] = useState("home");
+  const [demoSessionId, setDemoSessionId] = useState("");
+  const [demoPlacement, setDemoPlacement] = useState(undefined);
+  const [demoError, setDemoError] = useState("");
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -135,6 +148,32 @@ export default function Dashboard() {
 
     loadDashboard();
   }, []);
+
+  const handlePlacementDemo = async (event) => {
+    event.preventDefault();
+    setIsDemoLoading(true);
+    setDemoError("");
+    setDemoPlacement(undefined);
+
+    const page = demoPage.trim() || "home";
+    const sessionId = demoSessionId.trim();
+    const params = { page };
+
+    if (sessionId) {
+      params.session_id = sessionId;
+    }
+
+    try {
+      const response = await api.get("/ads/placement", { params });
+      setDemoPage(page);
+      setDemoPlacement(response.data ?? null);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setDemoError(typeof detail === "string" && detail.trim() ? detail : "Failed to load ad placement.");
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
 
   const kpis = [
     { label: "Total Sessions", value: summary.sessions.toLocaleString(), change: "Live data" },
@@ -190,6 +229,98 @@ export default function Dashboard() {
           </div>
         </article>
       </div>
+
+      <article className="rounded-2xl bg-white p-5 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">ML Placement Demo</h2>
+            <p className="mt-1 text-sm text-slate-500">Run the storefront placement endpoint for a page and session.</p>
+          </div>
+        </div>
+
+        <form className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_auto]" onSubmit={handlePlacementDemo}>
+          <div>
+            <label htmlFor="placement-page" className="mb-1 block text-sm font-medium text-slate-700">
+              Page
+            </label>
+            <input
+              id="placement-page"
+              type="text"
+              value={demoPage}
+              onChange={(event) => setDemoPage(event.target.value)}
+              placeholder="home"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-slate-300 transition focus:ring"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="placement-session" className="mb-1 block text-sm font-medium text-slate-700">
+              Session ID
+            </label>
+            <input
+              id="placement-session"
+              type="text"
+              value={demoSessionId}
+              onChange={(event) => setDemoSessionId(event.target.value)}
+              placeholder="123"
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-slate-300 transition focus:ring"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <button
+              type="submit"
+              disabled={isDemoLoading}
+              className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
+            >
+              {isDemoLoading ? "Loading..." : "Run Placement Demo"}
+            </button>
+          </div>
+        </form>
+
+        {demoError ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{demoError}</p>
+        ) : null}
+
+        {demoPlacement === null ? (
+          <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            No ad returned for this placement.
+          </p>
+        ) : null}
+
+        {demoPlacement ? (
+          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+            <div className="rounded-xl border border-slate-200 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ad Preview</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">{formatDemoValue(demoPlacement.title)}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">{formatDemoValue(demoPlacement.content)}</p>
+              {demoPlacement.image_url ? (
+                <img
+                  src={demoPlacement.image_url}
+                  alt={demoPlacement.title || "Placement ad"}
+                  className="mt-4 h-44 w-full rounded-lg object-cover"
+                />
+              ) : null}
+            </div>
+
+            <dl className="grid gap-3 rounded-xl border border-slate-200 p-4 text-sm">
+              {[
+                ["Segment", demoPlacement.segment],
+                ["Segment Label", demoPlacement.segment_label],
+                ["Ranking Strategy", demoPlacement.ranking_strategy],
+                ["Model Version", demoPlacement.model_version],
+                ["Backend Explanation", demoPlacement.explanation],
+                ["Impression ID", demoPlacement.impression_id]
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+                  <dd className="mt-1 break-words font-medium text-slate-900">{formatDemoValue(value)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
+      </article>
     </section>
   );
 }
