@@ -210,7 +210,11 @@ def main() -> int:
         print(f"Total sessions with events currently available: {total_sessions}", file=sys.stderr)
         return 1
 
-    model_path = train_and_save_model(feature_matrix)
+    model_path = train_and_save_model(
+        feature_matrix,
+        training_source="real_db_sessions",
+        training_session_count=used_sessions,
+    )
     print(f"Model trained successfully: {model_path}")
     print(f"Sessions used: {used_sessions}")
     print(f"Feature set: {', '.join(FEATURE_NAMES)}")

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import joblib
 import numpy as np
@@ -11,6 +13,14 @@ from sklearn.preprocessing import StandardScaler
 
 MODEL_PATH = Path(__file__).resolve().parent / "model.pkl"
 RANDOM_STATE = 42
+N_CLUSTERS = 3
+MODEL_TYPE = "kmeans_session_segmentation"
+MODEL_VERSION = "kmeans-session-v1"
+SEGMENT_LABELS = {
+    0: "low",
+    1: "medium",
+    2: "high",
+}
 CATEGORY_SLUGS = [
     "electronics",
     "clothing",
@@ -150,12 +160,37 @@ def build_feature_vector(
     return np.array([[feature_map[name] for name in FEATURE_NAMES]], dtype=float)
 
 
-def _fit_model(feature_matrix: np.ndarray) -> dict[str, object]:
+def _build_metadata(
+    *,
+    training_source: str,
+    training_session_count: int,
+) -> dict[str, Any]:
+    """Build metadata stored next to the persisted model artifact."""
+    return {
+        "model_type": MODEL_TYPE,
+        "model_version": MODEL_VERSION,
+        "trained_at": datetime.now(UTC).isoformat(),
+        "training_source": training_source,
+        "training_session_count": int(training_session_count),
+        "feature_names": FEATURE_NAMES,
+        "random_state": RANDOM_STATE,
+        "n_clusters": N_CLUSTERS,
+        "scaler_type": "StandardScaler",
+        "segment_labels": SEGMENT_LABELS,
+    }
+
+
+def _fit_model(
+    feature_matrix: np.ndarray,
+    *,
+    training_source: str,
+    training_session_count: int | None = None,
+) -> dict[str, object]:
     """Train a KMeans model and build a stable low/medium/high segment mapping."""
     scaler = StandardScaler()
     scaled_features = scaler.fit_transform(feature_matrix)
 
-    model = KMeans(n_clusters=3, random_state=RANDOM_STATE, n_init=10)
+    model = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE, n_init=10)
     model.fit(scaled_features)
 
     raw_centers = scaler.inverse_transform(model.cluster_centers_)
@@ -170,13 +205,22 @@ def _fit_model(feature_matrix: np.ndarray) -> dict[str, object]:
         "scaler": scaler,
         "feature_names": FEATURE_NAMES,
         "cluster_to_segment": cluster_to_segment,
+        "metadata": _build_metadata(
+            training_source=training_source,
+            training_session_count=training_session_count or int(feature_matrix.shape[0]),
+        ),
     }
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(payload, MODEL_PATH)
     return payload
 
 
-def train_and_save_model(feature_matrix: np.ndarray) -> Path:
+def train_and_save_model(
+    feature_matrix: np.ndarray,
+    *,
+    training_source: str = "real_db_sessions",
+    training_session_count: int | None = None,
+) -> Path:
     """Train a model from the provided feature matrix and persist it to disk."""
     if feature_matrix.ndim != 2:
         raise ValueError("feature_matrix must be a 2D array")
@@ -185,13 +229,22 @@ def train_and_save_model(feature_matrix: np.ndarray) -> Path:
     if feature_matrix.shape[0] < 3:
         raise ValueError("Need at least 3 sessions to train a 3-cluster model")
 
-    _fit_model(feature_matrix.astype(float))
+    _fit_model(
+        feature_matrix.astype(float),
+        training_source=training_source,
+        training_session_count=training_session_count,
+    )
     return MODEL_PATH
 
 
 def _fit_default_model() -> dict[str, object]:
     """Train and persist the fallback synthetic model."""
-    return _fit_model(_generate_synthetic_sessions())
+    feature_matrix = _generate_synthetic_sessions()
+    return _fit_model(
+        feature_matrix,
+        training_source="synthetic_fallback",
+        training_session_count=int(feature_matrix.shape[0]),
+    )
 
 
 def _load_or_train_model() -> dict[str, object]:

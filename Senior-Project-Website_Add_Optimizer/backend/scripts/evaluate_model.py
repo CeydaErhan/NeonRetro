@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+from typing import Any
 
 import joblib
 import numpy as np
@@ -37,15 +38,42 @@ def _format_float(value: float) -> str:
     return f"{value:.3f}"
 
 
+def _print_model_metadata(metadata: dict[str, Any]) -> None:
+    """Print artifact metadata while tolerating older model payloads."""
+    if not metadata:
+        print("Model metadata: not available")
+        return
+
+    print("Model metadata:")
+    for key in (
+        "model_type",
+        "model_version",
+        "trained_at",
+        "training_source",
+        "training_session_count",
+        "random_state",
+        "n_clusters",
+        "scaler_type",
+    ):
+        if key in metadata:
+            print(f"  {key}: {metadata[key]}")
+
+    segment_labels = metadata.get("segment_labels")
+    if isinstance(segment_labels, dict):
+        formatted_labels = ", ".join(f"{segment}={label}" for segment, label in sorted(segment_labels.items()))
+        print(f"  segment_labels: {formatted_labels}")
+
+
 def _print_cluster_summary(
     cluster_id: int,
     segment: int,
+    segment_label: str,
     raw_features: np.ndarray,
 ) -> None:
     """Print one cluster summary block."""
     session_count = raw_features.shape[0]
     averages = raw_features.mean(axis=0)
-    print(f"Cluster {cluster_id} -> Segment {segment}")
+    print(f"Cluster {cluster_id} -> Segment {segment} ({segment_label})")
     print(f"  Sessions: {session_count}")
     for feature_name, avg_value in zip(FEATURE_NAMES, averages, strict=True):
         print(f"  Avg {feature_name}: {_format_float(float(avg_value))}")
@@ -72,14 +100,17 @@ def main() -> int:
     model = payload["model"]
     scaler = payload.get("scaler")
     cluster_to_segment: dict[int, int] = payload["cluster_to_segment"]
+    metadata: dict[str, Any] = payload.get("metadata", {})
+    label_lookup: dict[int, str] = metadata.get("segment_labels", {0: "low", 1: "medium", 2: "high"})
 
     scaled_matrix = scaler.transform(feature_matrix) if scaler is not None else feature_matrix
     cluster_labels = np.asarray(model.predict(scaled_matrix), dtype=int)
-    segment_labels = np.asarray([cluster_to_segment[int(cluster)] for cluster in cluster_labels], dtype=int)
+    predicted_segments = np.asarray([cluster_to_segment[int(cluster)] for cluster in cluster_labels], dtype=int)
 
     print(f"Evaluated sessions: {used_sessions}")
     print(f"Model file: {MODEL_PATH}")
     print(f"Feature set: {', '.join(FEATURE_NAMES)}")
+    _print_model_metadata(metadata)
     print()
 
     unique_clusters = np.unique(cluster_labels)
@@ -97,15 +128,17 @@ def main() -> int:
     print("Cluster summaries")
     for cluster_id in sorted(unique_clusters):
         segment = cluster_to_segment[int(cluster_id)]
+        segment_label = label_lookup.get(int(segment), f"segment-{segment}")
         cluster_rows = feature_matrix[cluster_labels == cluster_id]
-        _print_cluster_summary(int(cluster_id), int(segment), cluster_rows)
+        _print_cluster_summary(int(cluster_id), int(segment), segment_label, cluster_rows)
         print()
 
     print("Segment distribution")
-    for segment in sorted(np.unique(segment_labels)):
-        count = int(np.sum(segment_labels == segment))
+    for segment in sorted(np.unique(predicted_segments)):
+        count = int(np.sum(predicted_segments == segment))
         share = (count / used_sessions) * 100.0
-        print(f"  Segment {segment}: {count} sessions ({share:.1f}%)")
+        label = label_lookup.get(int(segment), f"segment-{segment}")
+        print(f"  Segment {segment} ({label}): {count} sessions ({share:.1f}%)")
 
     return 0
 
