@@ -225,6 +225,11 @@ class AdPlacementRead(BaseModel):
     image_url: str | None = None
     placement_page: str
     impression_id: int | None = None
+    segment: int | None = None
+    segment_label: str | None = None
+    ranking_strategy: str | None = None
+    model_version: str | None = None
+    explanation: str | None = None
 
 
 class ImpressionClickPayload(BaseModel):
