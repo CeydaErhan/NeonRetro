@@ -107,3 +107,65 @@ python -c "from ml.scoring import ensure_model, score_session; print(ensure_mode
 ```
 
 This confirms that `model.pkl` can be loaded and used for inference.
+
+## Final Demo Flow
+
+This project is a demo-ready prototype for behavior-based segmentation and explainable ML placement. For the final local demo, run the full stack and ML scripts from `Senior-Project-Website_Add_Optimizer`.
+
+Start the existing Docker Compose services:
+
+```bash
+docker compose up -d postgres backend admin-frontend store
+```
+
+Seed balanced demo sessions, train the KMeans model, and evaluate the saved artifact:
+
+```bash
+docker compose exec backend python scripts/seed_ml_demo_sessions.py --reset-demo
+docker compose exec backend python scripts/train_model.py --min-sessions 30
+docker compose exec backend python scripts/evaluate_model.py --min-sessions 20
+```
+
+Then open the local apps:
+
+- Storefront: `http://localhost:8000`
+- Backend API: `http://localhost:10000`
+- Admin dashboard: `http://localhost:5173`
+
+Use the Dashboard ML Placement Demo card to test `GET /ads/placement?page=home&session_id=<session_id>`. A valid seeded session should return a selected ad plus ML explanation fields. A blank or invalid session demonstrates fallback behavior.
+
+Important local command note: on this machine, host Python 3.14 caused `psycopg2-binary` install/build issues because the package attempted a source build and required `pg_config`. The recommended demo path is to run the ML scripts inside the Docker backend container, where the pinned backend dependencies are already installed.
+
+## Explainable ML Placement Story
+
+The ML demo uses `StandardScaler` plus KMeans to group visitor sessions by behavior-based segmentation signals. The model consumes session behavior features such as page views, click count, dwell time, unique products, add-to-cart count, attribute selections, average price, price spread, category diversity, and category ratios.
+
+The trainer maps KMeans clusters into stable engagement segments:
+
+- `0`: low engagement
+- `1`: medium engagement
+- `2`: high engagement
+
+The ad placement endpoint uses the segment to choose a segment-based ranking strategy:
+
+- Low engagement: least exposed ads
+- Medium engagement: impression popularity
+- High engagement: CTR performance
+
+The placement response is intentionally explainable for demo use. When model scoring is available, the response includes:
+
+- `segment`
+- `segment_label`
+- `ranking_strategy`
+- `model_version`
+- `explanation`
+
+For a valid ML placement, `explanation` is `ml:kmeans_segment_placement`. Fallback responses use explicit explanations such as `fallback:no_session_id`, `fallback:session_not_found`, or `fallback:model_missing`.
+
+## Known Limitations
+
+- Model retraining is manual and script-based in this prototype.
+- A dedicated A/B experiment module is future work.
+- The current project supports comparison through campaign and ad metrics such as impressions, clicks, and CTR.
+- Production-grade model monitoring, drift detection, automated retraining, and rollout controls are future work.
+- `backend/ml/model.pkl` is a generated local artifact and must not be committed.
