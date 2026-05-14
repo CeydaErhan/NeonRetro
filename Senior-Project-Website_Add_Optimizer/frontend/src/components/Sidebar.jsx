@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 const navItems = [
   { label: "Dashboard", to: "/dashboard" },
   { label: "Campaigns", to: "/campaigns" },
+  { label: "Ads", to: "/ads" },
   { label: "Analytics", to: "/analytics" },
   { label: "Settings", to: "/settings" }
 ];
@@ -37,7 +38,7 @@ export default function Sidebar() {
       </aside>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-700 bg-slatepanel px-2 py-2 md:hidden">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {navItems.map((item) => (
             <NavLink
               key={`mobile-${item.to}`}

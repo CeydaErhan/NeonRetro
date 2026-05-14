@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
+import Ads from "./pages/Ads";
 import Analytics from "./pages/Analytics";
 import Campaigns from "./pages/Campaigns";
 import Dashboard from "./pages/Dashboard";
@@ -45,6 +46,16 @@ export default function App() {
           <ProtectedRoute>
             <AppShell>
               <Campaigns />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ads"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <Ads />
             </AppShell>
           </ProtectedRoute>
         }

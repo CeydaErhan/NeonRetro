@@ -22,6 +22,20 @@ const initialSummary = {
   ctr: 0
 };
 
+const placementFeatureRows = [
+  ["page_count", "Page Count"],
+  ["click_count", "Click Count"],
+  ["dwell_time_seconds", "Dwell Time Seconds"],
+  ["unique_products", "Unique Products"],
+  ["add_to_cart_count", "Add To Cart Count"],
+  ["attribute_selection_count", "Attribute Selection Count"],
+  ["avg_price", "Avg Price"],
+  ["category_diversity", "Category Diversity"],
+  ["electronics_ratio", "Electronics Ratio"],
+  ["clothing_ratio", "Clothing Ratio"],
+  ["home_appliances_ratio", "Home Appliances Ratio"]
+];
+
 function buildAuthorizationHeader(token) {
   if (!token) {
     return null;
@@ -102,6 +116,18 @@ function buildCampaignChartData(campaigns, events) {
 function formatDemoValue(value) {
   if (value === null || value === undefined || value === "") {
     return "Not returned";
+  }
+
+  return String(value);
+}
+
+function formatFeatureValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "Not returned";
+  }
+
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(3);
   }
 
   return String(value);
@@ -289,35 +315,72 @@ export default function Dashboard() {
         ) : null}
 
         {demoPlacement ? (
-          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,360px)]">
+          <div className="mt-5 space-y-5">
             <div className="rounded-xl border border-slate-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ad Preview</p>
-              <h3 className="mt-2 text-lg font-semibold text-slate-900">{formatDemoValue(demoPlacement.title)}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{formatDemoValue(demoPlacement.content)}</p>
-              {demoPlacement.image_url ? (
-                <img
-                  src={demoPlacement.image_url}
-                  alt={demoPlacement.title || "Placement ad"}
-                  className="mt-4 h-44 w-full rounded-lg object-cover"
-                />
-              ) : null}
+              <h3 className="text-base font-semibold text-slate-900">Why this ad was selected?</h3>
+              <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
+                <div className="rounded-lg bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Ad Preview</p>
+                  <h4 className="mt-2 text-lg font-semibold text-slate-900">{formatDemoValue(demoPlacement.title)}</h4>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{formatDemoValue(demoPlacement.content)}</p>
+                  {demoPlacement.image_url ? (
+                    <img
+                      src={demoPlacement.image_url}
+                      alt={demoPlacement.title || "Placement ad"}
+                      className="mt-4 h-44 w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <p className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
+                      No image URL returned.
+                    </p>
+                  )}
+                </div>
+
+                <dl className="grid gap-3 rounded-lg bg-slate-50 p-4 text-sm">
+                  {[
+                    ["Segment", demoPlacement.segment],
+                    ["Segment Label", demoPlacement.segment_label],
+                    ["Ranking Strategy", demoPlacement.ranking_strategy],
+                    ["Model Version", demoPlacement.model_version],
+                    ["Explanation", demoPlacement.explanation],
+                    ["Decision Reason", demoPlacement.decision_reason],
+                    ["Candidate Count", demoPlacement.candidate_count],
+                    ["Fallback Reason", demoPlacement.fallback_reason],
+                    ["Impression ID", demoPlacement.impression_id]
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+                      <dd className="mt-1 break-words font-medium text-slate-900">{formatDemoValue(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
 
-            <dl className="grid gap-3 rounded-xl border border-slate-200 p-4 text-sm">
-              {[
-                ["Segment", demoPlacement.segment],
-                ["Segment Label", demoPlacement.segment_label],
-                ["Ranking Strategy", demoPlacement.ranking_strategy],
-                ["Model Version", demoPlacement.model_version],
-                ["Backend Explanation", demoPlacement.explanation],
-                ["Impression ID", demoPlacement.impression_id]
-              ].map(([label, value]) => (
-                <div key={label}>
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-                  <dd className="mt-1 break-words font-medium text-slate-900">{formatDemoValue(value)}</dd>
-                </div>
-              ))}
-            </dl>
+            <div className="overflow-hidden rounded-xl border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Feature Used
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Value
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {placementFeatureRows.map(([key, label]) => (
+                    <tr key={key} className="hover:bg-slate-50/70">
+                      <td className="px-4 py-2 font-medium text-slate-900">{label}</td>
+                      <td className="px-4 py-2 text-slate-700">
+                        {formatFeatureValue(demoPlacement.features_used?.[key])}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : null}
       </article>
