@@ -78,6 +78,20 @@ def _placement_ranking_strategy(segment: int) -> str:
     return "ctr_performance"
 
 
+def _count_candidates(db: Session, stmt) -> int:
+    """Count eligible ad candidates for a grouped placement query."""
+    return int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+
+
+def _decision_reason(segment_label: str | None, ranking_strategy: str | None) -> str | None:
+    """Build a concise explanation of the ranking rule used."""
+    if segment_label and ranking_strategy:
+        return f"Segment {segment_label} uses {ranking_strategy} ranking for eligible active ads."
+    if ranking_strategy:
+        return f"Fallback placement uses {ranking_strategy} ranking for eligible active ads."
+    return None
+
+
 def _create_impression(db: Session, ad: Ad, session: VisitorSession | None) -> int | None:
     """Record the selected placement when a valid visitor session is available."""
     if session is None:
@@ -100,6 +114,10 @@ def _build_placement_response(
     ranking_strategy: str | None = None,
     model_version: str | None = None,
     explanation: str | None = None,
+    features_used: dict | None = None,
+    decision_reason: str | None = None,
+    fallback_reason: str | None = None,
+    candidate_count: int | None = None,
 ) -> AdPlacementRead:
     """Build the public storefront ad placement response."""
     return AdPlacementRead(
@@ -116,6 +134,10 @@ def _build_placement_response(
         ranking_strategy=ranking_strategy,
         model_version=model_version,
         explanation=explanation,
+        features_used=features_used,
+        decision_reason=decision_reason,
+        fallback_reason=fallback_reason,
+        candidate_count=candidate_count,
     )
 
 
@@ -149,11 +171,15 @@ async def get_ad_placement(
                 )
                 features = _derive_session_ml_features(session, events)
                 segment = score_session(**features)
-                ml_placement = db.execute(_ml_placement_statement(normalized_page, segment)).first()
+                ml_stmt = _ml_placement_statement(normalized_page, segment)
+                candidate_count = _count_candidates(db, ml_stmt)
+                ml_placement = db.execute(ml_stmt).first()
                 if ml_placement is not None:
                     ad, campaign, _ = ml_placement
                     model_metadata = _load_model_metadata() or {}
                     model_version = model_metadata.get("model_version")
+                    segment_label = _segment_label(segment)
+                    ranking_strategy = _placement_ranking_strategy(segment)
                     impression_id = _create_impression(db, ad, session)
                     return _build_placement_response(
                         ad=ad,
@@ -161,16 +187,21 @@ async def get_ad_placement(
                         normalized_page=normalized_page,
                         impression_id=impression_id,
                         segment=segment,
-                        segment_label=_segment_label(segment),
-                        ranking_strategy=_placement_ranking_strategy(segment),
+                        segment_label=segment_label,
+                        ranking_strategy=ranking_strategy,
                         model_version=str(model_version) if model_version is not None else None,
                         explanation="ml:kmeans_segment_placement",
+                        features_used=features,
+                        decision_reason=_decision_reason(segment_label, ranking_strategy),
+                        candidate_count=candidate_count,
                     )
                 fallback_explanation = "fallback:no_ml_ad"
             except Exception:
                 fallback_explanation = "fallback:scoring_failed"
 
-    placement = db.execute(_fallback_placement_statement(normalized_page)).first()
+    fallback_stmt = _fallback_placement_statement(normalized_page)
+    candidate_count = _count_candidates(db, fallback_stmt)
+    placement = db.execute(fallback_stmt).first()
     if placement is None:
         return None
 
@@ -182,6 +213,10 @@ async def get_ad_placement(
         normalized_page=normalized_page,
         impression_id=impression_id,
         explanation=fallback_explanation,
+        ranking_strategy="least_exposed_ads",
+        decision_reason=_decision_reason(None, "least_exposed_ads"),
+        fallback_reason=fallback_explanation.removeprefix("fallback:") if fallback_explanation else None,
+        candidate_count=candidate_count,
     )
 
 

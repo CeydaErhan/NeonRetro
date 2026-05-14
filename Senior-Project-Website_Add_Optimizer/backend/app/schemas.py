@@ -230,6 +230,10 @@ class AdPlacementRead(BaseModel):
     ranking_strategy: str | None = None
     model_version: str | None = None
     explanation: str | None = None
+    features_used: dict | None = None
+    decision_reason: str | None = None
+    fallback_reason: str | None = None
+    candidate_count: int | None = None
 
 
 class ImpressionClickPayload(BaseModel):
