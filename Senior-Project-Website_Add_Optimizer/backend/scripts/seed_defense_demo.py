@@ -72,6 +72,81 @@ CAMPAIGN_DEFS = [
         ],
     },
     {
+        "name": "Defense Demo - Clothing Focus",
+        "target_page": "clothing",
+        "ads": [
+            {
+                "key": "clothing_drop",
+                "title": "Streetwear Layering Picks",
+                "content": "Clothing-focused placement for visitors comparing apparel and accessory categories.",
+                "target_page": "clothing",
+                "image_url": "https://images.pexels.com/photos/1124465/pexels-photo-1124465.jpeg?auto=compress&cs=tinysrgb&w=900",
+                "impressions": 14,
+                "clicks": 3,
+            }
+        ],
+    },
+    {
+        "name": "Defense Demo - Beauty Focus",
+        "target_page": "beauty",
+        "ads": [
+            {
+                "key": "beauty_essentials",
+                "title": "Glow Routine Essentials",
+                "content": "Beauty-targeted promotion for visitors showing skincare or cosmetics interest.",
+                "target_page": "beauty",
+                "image_url": "https://images.pexels.com/photos/3762453/pexels-photo-3762453.jpeg?auto=compress&cs=tinysrgb&w=900",
+                "impressions": 11,
+                "clicks": 2,
+            }
+        ],
+    },
+    {
+        "name": "Defense Demo - Home Appliances Focus",
+        "target_page": "home-appliances",
+        "ads": [
+            {
+                "key": "home_appliance_upgrade",
+                "title": "Smart Home Upgrade Week",
+                "content": "Home-appliance placement for visitors exploring higher-consideration household products.",
+                "target_page": "home-appliances",
+                "image_url": "https://images.pexels.com/photos/4108711/pexels-photo-4108711.jpeg?auto=compress&cs=tinysrgb&w=900",
+                "impressions": 15,
+                "clicks": 4,
+            }
+        ],
+    },
+    {
+        "name": "Defense Demo - Books Focus",
+        "target_page": "books",
+        "ads": [
+            {
+                "key": "books_editor_picks",
+                "title": "Weekend Reading Picks",
+                "content": "Books-focused placement for visitors browsing discovery-driven catalog pages.",
+                "target_page": "books",
+                "image_url": "https://images.pexels.com/photos/590493/pexels-photo-590493.jpeg?auto=compress&cs=tinysrgb&w=900",
+                "impressions": 9,
+                "clicks": 1,
+            }
+        ],
+    },
+    {
+        "name": "Defense Demo - Sports Focus",
+        "target_page": "sports",
+        "ads": [
+            {
+                "key": "sports_active",
+                "title": "Performance Gear Spotlight",
+                "content": "Sports-targeted placement for visitors showing active lifestyle and equipment interest.",
+                "target_page": "sports",
+                "image_url": "https://images.pexels.com/photos/1552242/pexels-photo-1552242.jpeg?auto=compress&cs=tinysrgb&w=900",
+                "impressions": 13,
+                "clicks": 3,
+            }
+        ],
+    },
+    {
         "name": "Defense Demo - All Pages Retargeting",
         "target_page": "all",
         "ads": [
@@ -181,6 +256,7 @@ DEMO_ML_PRICES = {
     "macbook": 179.99,
     "headphones": 99.99,
     "vacuum": 159.99,
+    "jeans": 79.99,
     "shoes": 94.99,
 }
 
@@ -353,7 +429,7 @@ def create_session(db: Any, visitor_id: str, user_agent: str, started_at: dateti
 
 
 def seed_demo_sessions() -> dict[str, int]:
-    """Create low, medium, and high-intent visitor sessions with realistic events."""
+    """Create deterministic defense demo sessions with realistic events."""
     now = datetime.now(UTC)
     created_ids: dict[str, int] = {}
 
@@ -376,8 +452,15 @@ def seed_demo_sessions() -> dict[str, int]:
                 "product",
                 metadata={"path": "/product.html", "query": "?id=3"},
             ),
+            event(
+                low.id,
+                low.started_at + timedelta(seconds=62),
+                "page_view",
+                "books",
+                metadata={"path": "/category.html", "query": "?cat=books", "category": "books", "category_name": "Books"},
+            ),
         ]
-        low.page_count = 2
+        low.page_count = 3
         db.add_all(low_events)
         created_ids["low_engagement_session_id"] = low.id
 
@@ -395,7 +478,12 @@ def seed_demo_sessions() -> dict[str, int]:
                 medium.started_at + timedelta(seconds=40),
                 "page_view",
                 "electronics",
-                metadata={"path": "/category.html", "query": "?cat=electronics"},
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=electronics",
+                    "category": "electronics",
+                    "category_name": "Electronics",
+                },
             ),
             event(
                 medium.id,
@@ -419,7 +507,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="select-attribute",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "iphone",
                     attribute_group="colors",
                     attribute_label="Color",
@@ -432,10 +520,38 @@ def seed_demo_sessions() -> dict[str, int]:
                 medium.started_at + timedelta(seconds=175),
                 "page_view",
                 "home-appliances",
-                metadata={"path": "/category.html", "query": "?cat=home-appliances"},
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=home-appliances",
+                    "category": "home-appliances",
+                    "category_name": "Home Appliances",
+                },
+            ),
+            event(
+                medium.id,
+                medium.started_at + timedelta(seconds=205),
+                "page_view",
+                "sports",
+                metadata={"path": "/category.html", "query": "?cat=sports", "category": "sports", "category_name": "Sports"},
+            ),
+            event(
+                medium.id,
+                medium.started_at + timedelta(seconds=228),
+                "click",
+                "sports",
+                element="open-product",
+                metadata=product_metadata("shoes", source="category"),
+            ),
+            event(
+                medium.id,
+                medium.started_at + timedelta(seconds=245),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=product_metadata("shoes"),
             ),
         ]
-        medium.page_count = 3
+        medium.page_count = 5
         db.add_all(medium_events)
         created_ids["medium_engagement_session_id"] = medium.id
 
@@ -453,7 +569,12 @@ def seed_demo_sessions() -> dict[str, int]:
                 high.started_at + timedelta(seconds=35),
                 "page_view",
                 "electronics",
-                metadata={"path": "/category.html", "query": "?cat=electronics"},
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=electronics",
+                    "category": "electronics",
+                    "category_name": "Electronics",
+                },
             ),
             event(
                 high.id,
@@ -625,7 +746,12 @@ def seed_demo_sessions() -> dict[str, int]:
                 high.started_at + timedelta(seconds=675),
                 "page_view",
                 "home-appliances",
-                metadata={"path": "/category.html", "query": "?cat=home-appliances"},
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=home-appliances",
+                    "category": "home-appliances",
+                    "category_name": "Home Appliances",
+                },
             ),
             event(
                 high.id,
@@ -668,7 +794,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 high.started_at + timedelta(seconds=835),
                 "page_view",
                 "clothing",
-                metadata={"path": "/category.html", "query": "?cat=clothing"},
+                metadata={"path": "/category.html", "query": "?cat=clothing", "category": "clothing", "category_name": "Clothing"},
             ),
             event(
                 high.id,
@@ -693,10 +819,412 @@ def seed_demo_sessions() -> dict[str, int]:
                 element="product-detail",
                 metadata=ml_product_metadata("shoes"),
             ),
+            event(
+                high.id,
+                high.started_at + timedelta(seconds=930),
+                "page_view",
+                "sports",
+                metadata={"path": "/category.html", "query": "?cat=sports", "category": "sports", "category_name": "Sports"},
+            ),
+            event(
+                high.id,
+                high.started_at + timedelta(seconds=950),
+                "click",
+                "sports",
+                element="open-product",
+                metadata=ml_product_metadata("headphones", source="cross-category-active"),
+            ),
         ]
-        high.page_count = 9
+        high.page_count = 10
         db.add_all(high_events)
         created_ids["high_intent_session_id"] = high.id
+
+        window = create_session(
+            db,
+            f"{DEMO_PREFIX}-window-shopper",
+            "Defense demo browser (window shopper)",
+            now - timedelta(minutes=12),
+            120,
+        )
+        window_events = [
+            event(window.id, window.started_at, "page_view", "home", metadata={"path": "/index.html", "query": None}),
+            event(
+                window.id,
+                window.started_at + timedelta(seconds=24),
+                "page_view",
+                "electronics",
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=electronics",
+                    "category": "electronics",
+                    "category_name": "Electronics",
+                },
+            ),
+            event(
+                window.id,
+                window.started_at + timedelta(seconds=54),
+                "page_view",
+                "books",
+                metadata={"path": "/category.html", "query": "?cat=books", "category": "books", "category_name": "Books"},
+            ),
+            event(
+                window.id,
+                window.started_at + timedelta(seconds=86),
+                "page_view",
+                "beauty",
+                metadata={"path": "/category.html", "query": "?cat=beauty", "category": "beauty", "category_name": "Beauty"},
+            ),
+        ]
+        window.page_count = 4
+        db.add_all(window_events)
+        created_ids["window_shopper_session_id"] = window.id
+
+        price_sensitive = create_session(
+            db,
+            f"{DEMO_PREFIX}-price-sensitive",
+            "Defense demo browser (price sensitive)",
+            now - timedelta(minutes=9),
+            210,
+        )
+        price_sensitive_events = [
+            event(price_sensitive.id, price_sensitive.started_at, "page_view", "home", metadata={"path": "/index.html", "query": None}),
+            event(
+                price_sensitive.id,
+                price_sensitive.started_at + timedelta(seconds=24),
+                "page_view",
+                "clothing",
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=clothing",
+                    "category": "clothing",
+                    "category_name": "Clothing",
+                },
+            ),
+            event(
+                price_sensitive.id,
+                price_sensitive.started_at + timedelta(seconds=56),
+                "click",
+                "clothing",
+                element="open-product",
+                metadata=ml_product_metadata("jeans", source="sale-grid"),
+            ),
+            event(
+                price_sensitive.id,
+                price_sensitive.started_at + timedelta(seconds=82),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("jeans"),
+            ),
+            event(
+                price_sensitive.id,
+                price_sensitive.started_at + timedelta(seconds=128),
+                "page_view",
+                "books",
+                metadata={"path": "/category.html", "query": "?cat=books", "category": "books", "category_name": "Books"},
+            ),
+        ]
+        price_sensitive.page_count = 3
+        db.add_all(price_sensitive_events)
+        created_ids["price_sensitive_session_id"] = price_sensitive.id
+
+        cross_category = create_session(
+            db,
+            f"{DEMO_PREFIX}-cross-category",
+            "Defense demo browser (cross category)",
+            now - timedelta(minutes=6),
+            430,
+        )
+        cross_category_events = [
+            event(cross_category.id, cross_category.started_at, "page_view", "home", metadata={"path": "/index.html", "query": None}),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=35),
+                "page_view",
+                "electronics",
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=electronics",
+                    "category": "electronics",
+                    "category_name": "Electronics",
+                },
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=65),
+                "click",
+                "electronics",
+                element="open-product",
+                metadata=ml_product_metadata("iphone", source="category"),
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=90),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("iphone"),
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=145),
+                "page_view",
+                "sports",
+                metadata={"path": "/category.html", "query": "?cat=sports", "category": "sports", "category_name": "Sports"},
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=175),
+                "click",
+                "sports",
+                element="open-product",
+                metadata=ml_product_metadata("shoes", source="category"),
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=200),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("shoes"),
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=250),
+                "page_view",
+                "home-appliances",
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=home-appliances",
+                    "category": "home-appliances",
+                    "category_name": "Home Appliances",
+                },
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=285),
+                "click",
+                "home-appliances",
+                element="open-product",
+                metadata=ml_product_metadata("vacuum", source="category"),
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=310),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("vacuum"),
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=360),
+                "page_view",
+                "books",
+                metadata={"path": "/category.html", "query": "?cat=books", "category": "books", "category_name": "Books"},
+            ),
+            event(
+                cross_category.id,
+                cross_category.started_at + timedelta(seconds=392),
+                "page_view",
+                "beauty",
+                metadata={"path": "/category.html", "query": "?cat=beauty", "category": "beauty", "category_name": "Beauty"},
+            ),
+        ]
+        cross_category.page_count = 6
+        db.add_all(cross_category_events)
+        created_ids["cross_category_session_id"] = cross_category.id
+
+        attribute_heavy = create_session(
+            db,
+            f"{DEMO_PREFIX}-attribute-heavy",
+            "Defense demo browser (attribute heavy)",
+            now - timedelta(minutes=3),
+            640,
+        )
+        attribute_heavy_events = [
+            event(attribute_heavy.id, attribute_heavy.started_at, "page_view", "home", metadata={"path": "/index.html", "query": None}),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=25),
+                "page_view",
+                "electronics",
+                metadata={
+                    "path": "/category.html",
+                    "query": "?cat=electronics",
+                    "category": "electronics",
+                    "category_name": "Electronics",
+                },
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=58),
+                "click",
+                "electronics",
+                element="open-product",
+                metadata=ml_product_metadata("iphone", source="category"),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=82),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("iphone"),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=130),
+                "click",
+                "product",
+                element="select-attribute",
+                metadata=ml_product_metadata(
+                    "iphone",
+                    attribute_group="storage",
+                    attribute_label="Storage",
+                    attribute_value="256GB",
+                    selected_attributes={"storage": "256GB"},
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=168),
+                "click",
+                "product",
+                element="select-attribute",
+                metadata=ml_product_metadata(
+                    "iphone",
+                    attribute_group="colors",
+                    attribute_label="Color",
+                    attribute_value="Gold",
+                    selected_attributes={"storage": "256GB", "colors": "Gold"},
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=218),
+                "click",
+                "electronics",
+                element="open-product",
+                metadata=ml_product_metadata("macbook", source="recommended-products"),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=242),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("macbook"),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=290),
+                "click",
+                "product",
+                element="select-attribute",
+                metadata=ml_product_metadata(
+                    "macbook",
+                    attribute_group="storage",
+                    attribute_label="Storage",
+                    attribute_value="1TB",
+                    selected_attributes={"storage": "1TB"},
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=330),
+                "click",
+                "product",
+                element="select-attribute",
+                metadata=ml_product_metadata(
+                    "macbook",
+                    attribute_group="colors",
+                    attribute_label="Color",
+                    attribute_value="Space Black",
+                    selected_attributes={"storage": "1TB", "colors": "Space Black"},
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=360),
+                "click",
+                "product",
+                element="add-to-cart",
+                metadata=ml_product_metadata(
+                    "macbook",
+                    selected_attributes={"storage": "1TB", "colors": "Space Black"},
+                    quantity=1,
+                    cart_size_after_add=1,
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=402),
+                "page_view",
+                "clothing",
+                metadata={"path": "/category.html", "query": "?cat=clothing", "category": "clothing", "category_name": "Clothing"},
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=434),
+                "click",
+                "clothing",
+                element="open-product",
+                metadata=ml_product_metadata("shoes", source="cross-sell"),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=458),
+                "product_view",
+                "product",
+                element="product-detail",
+                metadata=ml_product_metadata("shoes"),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=494),
+                "click",
+                "product",
+                element="select-attribute",
+                metadata=ml_product_metadata(
+                    "shoes",
+                    attribute_group="sizes",
+                    attribute_label="Size",
+                    attribute_value="42",
+                    selected_attributes={"sizes": "42"},
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=536),
+                "click",
+                "product",
+                element="select-attribute",
+                metadata=ml_product_metadata(
+                    "shoes",
+                    attribute_group="colors",
+                    attribute_label="Color",
+                    attribute_value="White",
+                    selected_attributes={"sizes": "42", "colors": "White"},
+                ),
+            ),
+            event(
+                attribute_heavy.id,
+                attribute_heavy.started_at + timedelta(seconds=575),
+                "click",
+                "product",
+                element="add-to-cart",
+                metadata=ml_product_metadata(
+                    "shoes",
+                    selected_attributes={"sizes": "42", "colors": "White"},
+                    quantity=1,
+                    cart_size_after_add=2,
+                ),
+            ),
+        ]
+        attribute_heavy.page_count = 4
+        db.add_all(attribute_heavy_events)
+        created_ids["attribute_heavy_session_id"] = attribute_heavy.id
 
         db.commit()
 
@@ -720,13 +1248,25 @@ def main() -> None:
     print(f"  password: {args.admin_password}")
     print()
     print("Demo sessions:")
-    for key in ("low_engagement_session_id", "medium_engagement_session_id", "high_intent_session_id"):
+    for key in (
+        "low_engagement_session_id",
+        "medium_engagement_session_id",
+        "high_intent_session_id",
+        "window_shopper_session_id",
+        "price_sensitive_session_id",
+        "cross_category_session_id",
+        "attribute_heavy_session_id",
+    ):
         print(f"  {key}: {session_ids[key]}")
     print()
     print("Try placement:")
     print(f"  /ads/placement?page=home&session_id={session_ids['low_engagement_session_id']}")
     print(f"  /ads/placement?page=home&session_id={session_ids['medium_engagement_session_id']}")
     print(f"  /ads/placement?page=home&session_id={session_ids['high_intent_session_id']}")
+    print(f"  /ads/placement?page=home&session_id={session_ids['window_shopper_session_id']}")
+    print(f"  /ads/placement?page=home&session_id={session_ids['price_sensitive_session_id']}")
+    print(f"  /ads/placement?page=home&session_id={session_ids['cross_category_session_id']}")
+    print(f"  /ads/placement?page=home&session_id={session_ids['attribute_heavy_session_id']}")
 
 
 if __name__ == "__main__":

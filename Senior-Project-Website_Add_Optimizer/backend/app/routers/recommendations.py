@@ -52,6 +52,38 @@ DEFENSE_SCENARIOS = {
         "expected_strategy": "ctr_performance",
         "behavior_summary": "Deep product comparison with repeated attribute choices and add-to-cart events.",
     },
+    "window-shopper": {
+        "label": "Window Shopper",
+        "button_label": "Run Window Shopper Scenario",
+        "visitor_id": "defense-demo-window-shopper",
+        "expected_segment_label": "Low",
+        "expected_strategy": "least_exposed_ads",
+        "behavior_summary": "Wide category browsing with shallow product interest and no cart activity.",
+    },
+    "price-sensitive": {
+        "label": "Price Sensitive Visitor",
+        "button_label": "Run Price Sensitive Scenario",
+        "visitor_id": "defense-demo-price-sensitive",
+        "expected_segment_label": "Low",
+        "expected_strategy": "least_exposed_ads",
+        "behavior_summary": "Lower-price product comparisons with cautious evaluation and no strong purchase commitment.",
+    },
+    "cross-category": {
+        "label": "Cross-Category Explorer",
+        "button_label": "Run Cross-Category Scenario",
+        "visitor_id": "defense-demo-cross-category",
+        "expected_segment_label": "Medium",
+        "expected_strategy": "impression_popularity",
+        "behavior_summary": "Broad exploration across multiple categories before settling on any one intent.",
+    },
+    "attribute-heavy": {
+        "label": "Attribute Heavy Visitor",
+        "button_label": "Run Attribute Heavy Scenario",
+        "visitor_id": "defense-demo-attribute-heavy",
+        "expected_segment_label": "High",
+        "expected_strategy": "ctr_performance",
+        "behavior_summary": "Detailed product evaluation with repeated variant selections and cart-building behavior.",
+    },
 }
 
 PRODUCTS_PATHS = []
@@ -215,7 +247,7 @@ def _derive_session_ml_features(visitor_session: VisitorSession, events: list[Ev
         category = metadata.get("category")
         if isinstance(category, str) and category:
             categories.add(category)
-            if category in category_counts:
+            if category in category_counts and event.type in {"page_view", "pageview", "product_view"}:
                 category_counts[category] += 1
 
         price = metadata.get("price")
@@ -539,10 +571,15 @@ def _build_suggested_products(
         return _stable_popular_product_suggestions(limit, exclude_viewed, seen_product_ids)
 
     if PRODUCT_RANKER_PATH.exists():
-        model_ranked = rank_products_with_model(events, limit=limit, exclude_viewed=exclude_viewed)
+        model_ranked = rank_products_with_model(
+            events,
+            limit=max(limit * 6, 40),
+            exclude_viewed=exclude_viewed,
+        )
         suggestions: list[SuggestedProductRead] = []
         for row in model_ranked:
             product = row["product"]
+            heuristic_suggestion = _score_catalog_product(product, profile, seen_product_ids, exclude_viewed)
             product_id = product.get("id")
             name = product.get("name")
             category = product.get("category")
@@ -560,6 +597,15 @@ def _build_suggested_products(
                 ]
             ):
                 continue
+
+            model_score = float(row["score"])
+            heuristic_score = float(heuristic_suggestion.score) if heuristic_suggestion is not None else 0.0
+            combined_score = round((model_score * 5.0) + heuristic_score, 3)
+            matched_signals = (
+                heuristic_suggestion.matched_signals
+                if heuristic_suggestion is not None and heuristic_suggestion.matched_signals
+                else _matched_signals_for_product(product, profile)
+            )
             suggestions.append(
                 SuggestedProductRead(
                     product_id=product_id,
@@ -568,12 +614,23 @@ def _build_suggested_products(
                     category_name=category_name,
                     price=float(price),
                     image=image,
-                    score=round(float(row["score"]), 3),
-                    matched_signals=_matched_signals_for_product(product, profile),
+                    score=combined_score,
+                    matched_signals=matched_signals,
                 )
             )
         if suggestions:
-            return suggestions
+            if profile.top_category:
+                suggestions.sort(
+                    key=lambda item: (
+                        item.category != profile.top_category,
+                        -item.score,
+                        item.price,
+                        item.name,
+                    )
+                )
+            else:
+                suggestions.sort(key=lambda item: (-item.score, item.price, item.name))
+            return suggestions[:limit]
 
     ranked_products: list[SuggestedProductRead] = []
     for product in _load_products_catalog():
@@ -581,7 +638,17 @@ def _build_suggested_products(
         if suggestion is not None:
             ranked_products.append(suggestion)
 
-    ranked_products.sort(key=lambda item: (-item.score, item.price, item.name))
+    if profile.top_category:
+        ranked_products.sort(
+            key=lambda item: (
+                item.category != profile.top_category,
+                -item.score,
+                item.price,
+                item.name,
+            )
+        )
+    else:
+        ranked_products.sort(key=lambda item: (-item.score, item.price, item.name))
     if ranked_products:
         return ranked_products[:limit]
     return _stable_popular_product_suggestions(limit, exclude_viewed, seen_product_ids)

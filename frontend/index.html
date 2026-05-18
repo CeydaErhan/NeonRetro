@@ -291,12 +291,98 @@
     let recommendedProducts = [];
     let activeCampaignPlacement = null;
     let recommendedProductsReloadTimer = null;
+    let campaignPlacementReloadTimer = null;
 
     function getStoreApiBaseUrl() {
       if (window.NEON_API_BASE_URL) return window.NEON_API_BASE_URL.replace(/\/$/, '');
       const hostname = window.location.hostname;
       if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:10000';
       return 'https://senior-project-website-add-optimizer.onrender.com';
+    }
+
+    function setCampaignDebug(message, data = null) {
+      let el = document.getElementById('campaign-debug');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'campaign-debug';
+        el.className = 'fixed bottom-4 right-4 z-50 max-w-md border border-[#FF2D75] bg-[#0A0A0F] px-3 py-2 text-[11px] font-mono text-[#00FF88] shadow-[0_0_12px_rgba(255,45,117,0.35)]';
+        document.body.appendChild(el);
+      }
+
+      const normalized = data === null || data === undefined
+        ? ''
+        : ` ${JSON.stringify(data, (_, value) => (typeof value === 'number' ? Number(value.toFixed?.(3) ?? value) : value))}`;
+      el.textContent = `[campaign] ${message}${normalized}`;
+    }
+
+    function normalizeFeatureNumber(value) {
+      if (typeof value === 'number') return value;
+      if (value && typeof value === 'object') {
+        if (typeof value.parsedValue === 'number') return value.parsedValue;
+        const sourceValue = Number(value.source);
+        if (!Number.isNaN(sourceValue)) return sourceValue;
+      }
+      const numericValue = Number(value);
+      return Number.isNaN(numericValue) ? 0 : numericValue;
+    }
+
+    function buildCampaignDecisionDebug(placement) {
+      if (!placement) return 'Campaign debug: no placement payload';
+
+      const features = placement.features_used || {};
+      const categoryRatios = [
+        ['electronics', normalizeFeatureNumber(features.electronics_ratio)],
+        ['clothing', normalizeFeatureNumber(features.clothing_ratio)],
+        ['beauty', normalizeFeatureNumber(features.beauty_ratio)],
+        ['home-appliances', normalizeFeatureNumber(features.home_appliances_ratio)],
+        ['books', normalizeFeatureNumber(features.books_ratio)],
+        ['sports', normalizeFeatureNumber(features.sports_ratio)]
+      ];
+
+      categoryRatios.sort((a, b) => b[1] - a[1]);
+      const [topCategory, topRatio] = categoryRatios[0] || ['none', 0];
+      const topCategoryLabel = catNames[topCategory] || topCategory;
+      const ratioPercent = `${Math.round(topRatio * 100)}%`;
+      const breakdown = categoryRatios
+        .filter(([, ratio]) => ratio > 0)
+        .map(([category, ratio]) => `${catNames[category] || category}: ${Math.round(ratio * 100)}%`)
+        .join(' | ');
+
+      const segmentLabel = placement.segment_label || 'fallback';
+      const rankingStrategy = placement.ranking_strategy || 'least_exposed_ads';
+      const selectedCampaign = placement.campaign_name || 'Unknown campaign';
+      const selectedAd = placement.title || 'Unknown ad';
+      const selectedTarget = placement.selected_target_page || 'all';
+
+      let reason = `Dominant category: ${topCategoryLabel} (${ratioPercent}). `;
+      if (breakdown) {
+        reason += `Breakdown: ${breakdown}. `;
+      }
+      reason += `Segment: ${segmentLabel}. Strategy: ${rankingStrategy}. `;
+      reason += `Selected campaign: ${selectedCampaign}. Ad: ${selectedAd}. Target: ${selectedTarget}. `;
+
+      if (placement.decision_reason) {
+        reason += `Reason: ${placement.decision_reason}`;
+      } else if (placement.fallback_reason) {
+        reason += `Fallback: ${placement.fallback_reason}`;
+      }
+
+      return reason;
+    }
+
+    function observeCampaignSection() {
+      const section = document.getElementById('campaign-banner-section');
+      if (!section || section.dataset.debugObserved === 'true') return;
+
+      const observer = new MutationObserver(() => {
+        console.log('[campaign] section class changed', section.className);
+      });
+
+      observer.observe(section, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+      section.dataset.debugObserved = 'true';
     }
 
     // ========== SEPET ==========
@@ -339,6 +425,13 @@
           ...extraMetadata
         }
       });
+    }
+
+    function queueCampaignPlacementReload(delay = 700) {
+      if (campaignPlacementReloadTimer) clearTimeout(campaignPlacementReloadTimer);
+      campaignPlacementReloadTimer = setTimeout(() => {
+        loadCampaignPlacement();
+      }, delay);
     }
 
     function toggleFavorite(productId) {
@@ -402,9 +495,13 @@
         cart_size_after_add: cart.reduce((sum, item) => sum + item.quantity, 0)
       });
       if (trackingRequest?.finally) {
-        trackingRequest.finally(() => queueRecommendedProductsReload(200));
+        trackingRequest.finally(() => {
+          queueRecommendedProductsReload(200);
+          queueCampaignPlacementReload(300);
+        });
       } else {
         queueRecommendedProductsReload();
+        queueCampaignPlacementReload();
       }
       showToast(`🛒 ${productName} added to cart`);
     }
@@ -563,7 +660,37 @@
     function renderCampaignBanner(placement) {
       const banner = document.getElementById('campaign-banner');
       const section = document.getElementById('campaign-banner-section');
-      if (!banner || !section || !placement) return;
+      console.log('[campaign] render:start', {
+        hasBanner: Boolean(banner),
+        hasSection: Boolean(section),
+        placement
+      });
+      setCampaignDebug('render-start', {
+        hasBanner: Boolean(banner),
+        hasSection: Boolean(section),
+        hasPlacement: Boolean(placement)
+      });
+      if (!banner || !section || !placement) {
+        console.warn('[campaign] render:missing-dom-or-placement');
+        setCampaignDebug('render-abort', {
+          hasBanner: Boolean(banner),
+          hasSection: Boolean(section),
+          hasPlacement: Boolean(placement)
+        });
+        return;
+      }
+      const categoryTargets = new Set(['electronics', 'clothing', 'beauty', 'home-appliances', 'books', 'sports']);
+      const campaignTarget = categoryTargets.has(placement.selected_target_page)
+        ? placement.selected_target_page
+        : placement.dominant_category;
+      const campaignHref = campaignTarget ? `offers.html?cat=${encodeURIComponent(campaignTarget)}` : 'offers.html';
+      console.log('[campaign] render:target', { campaignTarget, campaignHref });
+      setCampaignDebug('render-target', { campaignTarget, campaignHref });
+      if (campaignTarget) {
+        window.sessionStorage.setItem('neon_campaign_target', campaignTarget);
+      } else {
+        window.sessionStorage.removeItem('neon_campaign_target');
+      }
 
       banner.innerHTML = `
         <div class="grid gap-0 md:grid-cols-[1.4fr_0.6fr]">
@@ -572,7 +699,7 @@
             <h3 class="text-2xl md:text-3xl font-black text-[#00FF88] leading-tight">${placement.title}</h3>
             <p class="mt-3 text-sm md:text-base text-[#00D4FF] font-mono leading-relaxed">${placement.content}</p>
             <div class="mt-5 flex flex-wrap gap-3">
-              <a href="offers.html" onclick="handleCampaignClick(event)" class="retro-btn-neon px-4 py-2 text-xs">SHOP CAMPAIGN</a>
+              <a href="${campaignHref}" onclick="handleCampaignClick(event)" class="retro-btn-neon px-4 py-2 text-xs">SHOP CAMPAIGN</a>
               <span class="border border-[#00FF88] px-3 py-2 text-[10px] font-mono text-[#00FF88]">PLACEMENT: HOME</span>
             </div>
           </div>
@@ -589,9 +716,25 @@
         </div>
       `;
       section.classList.remove('hidden');
+      console.log('[campaign] render:end', {
+        hiddenAfterRender: section.classList.contains('hidden'),
+        htmlLength: banner.innerHTML.length
+      });
+      setCampaignDebug('render-end', {
+        hiddenAfterRender: section.classList.contains('hidden'),
+        htmlLength: banner.innerHTML.length
+      });
     }
 
     async function handleCampaignClick(event) {
+      const categoryTargets = new Set(['electronics', 'clothing', 'beauty', 'home-appliances', 'books', 'sports']);
+      const campaignTarget = categoryTargets.has(activeCampaignPlacement?.selected_target_page)
+        ? activeCampaignPlacement.selected_target_page
+        : activeCampaignPlacement?.dominant_category;
+      if (campaignTarget) {
+        window.sessionStorage.setItem('neon_campaign_target', campaignTarget);
+      }
+
       if (!activeCampaignPlacement?.impression_id || !window.tracker?.getSessionId) return;
 
       try {
@@ -609,37 +752,87 @@
 
     async function loadCampaignPlacement() {
       const section = document.getElementById('campaign-banner-section');
-      if (!section || !window.tracker?.getSessionId) return;
+      observeCampaignSection();
+      console.log('[campaign] loadCampaignPlacement:start', {
+        hasSection: Boolean(section),
+        hasTracker: Boolean(window.tracker),
+        hasGetSessionId: Boolean(window.tracker?.getSessionId)
+      });
+      setCampaignDebug('load-start', {
+        hasSection: Boolean(section),
+        hasTracker: Boolean(window.tracker),
+        hasGetSessionId: Boolean(window.tracker?.getSessionId)
+      });
+      if (!section || !window.tracker?.getSessionId) {
+        console.warn('[campaign] early-exit:no-section-or-tracker');
+        setCampaignDebug('early-exit', {
+          reason: 'no-section-or-tracker',
+          hasSection: Boolean(section),
+          hasTracker: Boolean(window.tracker),
+          hasGetSessionId: Boolean(window.tracker?.getSessionId)
+        });
+        return;
+      }
 
       try {
         let sessionId = await window.tracker.getSessionId();
         let query = sessionId ? `?page=home&session_id=${sessionId}` : '?page=home';
+        console.log('[campaign] requesting placement', { sessionId, query, apiBase: getStoreApiBaseUrl() });
+        setCampaignDebug('requesting-placement', { sessionId, query });
         let response = await fetch(`${getStoreApiBaseUrl()}/ads/placement${query}`);
+        console.log('[campaign] response', { ok: response.ok, status: response.status });
+        setCampaignDebug('response', { ok: response.ok, status: response.status });
         if (!response.ok) {
           section.classList.add('hidden');
+          console.warn('[campaign] response-not-ok');
+          setCampaignDebug('response-not-ok', { status: response.status });
           return;
         }
 
         let placement = await response.json();
+        console.log('[campaign] placement payload', placement);
+        setCampaignDebug('placement-received', {
+          title: placement?.title,
+          campaign: placement?.campaign_name,
+          fallback: placement?.fallback_reason,
+          segment: placement?.segment_label
+        });
         if (placement?.fallback_reason === 'session_not_found' && window.tracker?.refreshSessionId) {
           sessionId = await window.tracker.refreshSessionId('stale_placement_session');
           query = sessionId ? `?page=home&session_id=${sessionId}` : '?page=home';
+          console.log('[campaign] retrying after stale session', { sessionId, query });
+          setCampaignDebug('retrying-stale-session', { sessionId, query });
           response = await fetch(`${getStoreApiBaseUrl()}/ads/placement${query}`);
           if (!response.ok) {
             section.classList.add('hidden');
+            console.warn('[campaign] retry-response-not-ok');
+            setCampaignDebug('retry-response-not-ok', { status: response.status });
             return;
           }
           placement = await response.json();
+          console.log('[campaign] retry placement payload', placement);
+          setCampaignDebug('retry-placement', {
+            title: placement?.title,
+            campaign: placement?.campaign_name,
+            fallback: placement?.fallback_reason,
+            segment: placement?.segment_label
+          });
         }
 
         if (!placement) {
           section.classList.add('hidden');
+          console.warn('[campaign] empty-placement');
+          setCampaignDebug('empty-placement');
           return;
         }
 
         activeCampaignPlacement = placement;
+        console.log('[campaign] calling renderCampaignBanner');
         renderCampaignBanner(placement);
-      } catch (_) {
+        setCampaignDebug('decision', buildCampaignDecisionDebug(placement));
+      } catch (error) {
+        console.error('[campaign] loadCampaignPlacement failed', error);
+        setCampaignDebug('catch', { message: error?.message || 'unknown error' });
         section.classList.add('hidden');
       }
     }
@@ -931,8 +1124,15 @@
         currentCategory = e.target.value;
         refreshProducts();
         const trackingRequest = trackCategoryInterest(currentCategory);
-        if (trackingRequest?.finally) trackingRequest.finally(() => queueRecommendedProductsReload(200));
-        else queueRecommendedProductsReload();
+        if (trackingRequest?.finally) {
+          trackingRequest.finally(() => {
+            queueRecommendedProductsReload(200);
+            queueCampaignPlacementReload(300);
+          });
+        } else {
+          queueRecommendedProductsReload();
+          queueCampaignPlacementReload();
+        }
       });
       document.getElementById('sort-select').addEventListener('change', (e) => {
         currentSort = e.target.value;
@@ -959,6 +1159,14 @@
       document.getElementById('mobile-search-input')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearch();
       });
+    });
+
+    window.addEventListener('pageshow', async () => {
+      try {
+        await loadCampaignPlacement();
+        await loadRecentlyViewed();
+        await loadRecommendedProducts();
+      } catch (_) {}
     });
   </script>
 

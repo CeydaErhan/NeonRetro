@@ -150,6 +150,16 @@ class VisitorsByDayRead(BaseModel):
     visitors: int
 
 
+class CampaignPerformanceRead(BaseModel):
+    """Campaign-level advertising performance used by the business dashboard."""
+
+    campaign_id: int
+    campaign_name: str
+    impressions: int
+    clicks: int
+    ctr: float
+
+
 class CampaignBase(BaseModel):
     """Shared campaign fields."""
 
@@ -220,10 +230,12 @@ class AdPlacementRead(BaseModel):
     ad_id: int
     campaign_id: int
     campaign_name: str
+    selected_target_page: str | None = None
     title: str
     content: str
     image_url: str | None = None
     placement_page: str
+    dominant_category: str | None = None
     impression_id: int | None = None
     segment: int | None = None
     segment_label: str | None = None

@@ -1,5 +1,6 @@
 """Ad management routes."""
 
+from collections import defaultdict
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,9 +13,10 @@ from app.models import Ad, Campaign, Event, Impression, User, VisitorSession
 from app.routers.recommendations import _derive_session_ml_features, _load_model_metadata, _segment_label
 from app.schemas import AdCreate, AdPlacementRead, AdRead, AdUpdate, ImpressionClickPayload
 from ml.calibration import calibrate_business_segment
-from ml.scoring import MODEL_PATH, score_session
+from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, score_session
 
 router = APIRouter(prefix="/ads", tags=["ads"])
+HOME_CATEGORY_OVERRIDE_THRESHOLD = 0.5
 
 
 @router.get("", response_model=list[AdRead])
@@ -24,9 +26,110 @@ async def list_ads(_: User = Depends(get_current_user), db: Session = Depends(ge
     return list(result.scalars().all())
 
 
-def _fallback_placement_statement(normalized_page: str):
+def _target_priority_case(target_column, prioritized_targets: list[str]):
+    """Build a stable target priority expression for placement ordering."""
+    whens = [(target_column == target, index) for index, target in enumerate(prioritized_targets)]
+    return case(*whens, else_=len(prioritized_targets))
+
+
+def _resolve_prioritized_targets(
+    normalized_page: str,
+    dominant_category: str | None = None,
+    dominant_category_ratio: float = 0.0,
+) -> list[str]:
+    """Return ordered placement targets with a strong-signal category override for the home page."""
+    prioritized_targets: list[str] = []
+
+    def append_target(target: str | None) -> None:
+        if not target:
+            return
+        if target not in prioritized_targets:
+            prioritized_targets.append(target)
+
+    if (
+        normalized_page == "home"
+        and dominant_category
+        and dominant_category != normalized_page
+        and dominant_category_ratio >= HOME_CATEGORY_OVERRIDE_THRESHOLD
+    ):
+        append_target(dominant_category)
+        append_target(normalized_page)
+    else:
+        append_target(normalized_page)
+    if dominant_category and dominant_category != normalized_page:
+        append_target(dominant_category)
+    append_target("all")
+
+    return prioritized_targets
+
+
+def _infer_dominant_category_signal(features: dict[str, float]) -> tuple[str | None, float]:
+    """Return the dominant category plus its ratio when session behavior shows a preference."""
+    best_category = None
+    best_ratio = 0.0
+    for category_slug in CATEGORY_SLUGS:
+        feature_key = category_slug.replace("-", "_") + "_ratio"
+        ratio = float(features.get(feature_key) or 0.0)
+        if ratio > best_ratio:
+            best_ratio = ratio
+            best_category = category_slug
+
+    if best_category and best_ratio > 0:
+        return best_category, best_ratio
+    return None, 0.0
+
+
+def _derive_category_override_signal(events: list[Event]) -> tuple[str | None, float]:
+    """Return a stronger category-intent signal for home banner overrides.
+
+    This is more responsive than raw ML category ratios because it gives extra
+    weight to deeper shopping actions like open-product, attribute selection,
+    and add-to-cart.
+    """
+    weighted_scores: dict[str, float] = defaultdict(float)
+
+    for event in events:
+        metadata = event.metadata_json or {}
+        category = metadata.get("category")
+        if not isinstance(category, str) or category not in CATEGORY_SLUGS:
+            continue
+
+        weight = 0.0
+        if event.type in {"page_view", "pageview"}:
+            weight = 1.0
+        elif event.type == "product_view":
+            weight = 1.5
+        elif event.type == "click":
+            if event.element == "open-product":
+                weight = 1.5
+            elif event.element == "select-attribute":
+                weight = 2.5
+            elif event.element == "add-to-cart":
+                weight = 4.0
+            else:
+                weight = 1.25
+
+        if weight > 0:
+            weighted_scores[category] += weight
+
+    total_score = sum(weighted_scores.values())
+    if total_score <= 0:
+        return None, 0.0
+
+    best_category, best_score = max(weighted_scores.items(), key=lambda item: item[1])
+    return best_category, float(best_score / total_score)
+
+
+def _fallback_placement_statement(
+    normalized_page: str,
+    dominant_category: str | None = None,
+    dominant_category_ratio: float = 0.0,
+):
     """Build the existing least-impression storefront placement query."""
     today = date.today()
+    prioritized_targets = _resolve_prioritized_targets(normalized_page, dominant_category, dominant_category_ratio)
+    campaign_priority = _target_priority_case(Campaign.target_page, prioritized_targets)
+    ad_priority = _target_priority_case(Ad.target_page, prioritized_targets)
     return (
         select(Ad, Campaign, func.count(Impression.id).label("impression_count"))
         .join(Campaign, Campaign.id == Ad.campaign_id)
@@ -34,16 +137,24 @@ def _fallback_placement_statement(normalized_page: str):
         .where(Campaign.status == "active")
         .where(Campaign.start_date <= today)
         .where(Campaign.end_date >= today)
-        .where(Campaign.target_page.in_([normalized_page, "all"]))
-        .where(Ad.target_page.in_([normalized_page, "all"]))
+        .where(Campaign.target_page.in_(prioritized_targets))
+        .where(Ad.target_page.in_(prioritized_targets))
         .group_by(Ad.id, Campaign.id)
-        .order_by(func.count(Impression.id).asc(), Campaign.id.desc(), Ad.id.desc())
+        .order_by(campaign_priority.asc(), ad_priority.asc(), func.count(Impression.id).asc(), Campaign.id.desc(), Ad.id.desc())
     )
 
 
-def _ml_placement_statement(normalized_page: str, segment: int):
+def _ml_placement_statement(
+    normalized_page: str,
+    segment: int,
+    dominant_category: str | None = None,
+    dominant_category_ratio: float = 0.0,
+):
     """Build a page-eligible ad query ordered by the KMeans segment strategy."""
     today = date.today()
+    prioritized_targets = _resolve_prioritized_targets(normalized_page, dominant_category, dominant_category_ratio)
+    campaign_priority = _target_priority_case(Campaign.target_page, prioritized_targets)
+    ad_priority = _target_priority_case(Ad.target_page, prioritized_targets)
     impressions_count = func.count(Impression.id)
     clicks_count = func.sum(case((Impression.clicked.is_(True), 1), else_=0))
     ctr_value = func.coalesce(
@@ -58,16 +169,16 @@ def _ml_placement_statement(normalized_page: str, segment: int):
         .where(Campaign.status == "active")
         .where(Campaign.start_date <= today)
         .where(Campaign.end_date >= today)
-        .where(Campaign.target_page.in_([normalized_page, "all"]))
-        .where(Ad.target_page.in_([normalized_page, "all"]))
+        .where(Campaign.target_page.in_(prioritized_targets))
+        .where(Ad.target_page.in_(prioritized_targets))
         .group_by(Ad.id, Campaign.id)
     )
 
     if segment == 0:
-        return stmt.order_by(impressions_count.asc(), Campaign.id.desc(), Ad.id.desc())
+        return stmt.order_by(campaign_priority.asc(), ad_priority.asc(), impressions_count.asc(), Campaign.id.desc(), Ad.id.desc())
     if segment == 1:
-        return stmt.order_by(desc(impressions_count), Campaign.id.desc(), Ad.id.desc())
-    return stmt.order_by(desc(ctr_value), desc(clicks_count), desc(impressions_count), Ad.id.desc())
+        return stmt.order_by(campaign_priority.asc(), ad_priority.asc(), desc(impressions_count), Campaign.id.desc(), Ad.id.desc())
+    return stmt.order_by(campaign_priority.asc(), ad_priority.asc(), desc(ctr_value), desc(clicks_count), desc(impressions_count), Ad.id.desc())
 
 
 def _placement_ranking_strategy(segment: int) -> str:
@@ -110,6 +221,7 @@ def _build_placement_response(
     campaign: Campaign,
     normalized_page: str,
     impression_id: int | None,
+    dominant_category: str | None = None,
     segment: int | None = None,
     segment_label: str | None = None,
     kmeans_segment: int | None = None,
@@ -129,10 +241,12 @@ def _build_placement_response(
         ad_id=ad.id,
         campaign_id=campaign.id,
         campaign_name=campaign.name,
+        selected_target_page=ad.target_page,
         title=ad.title,
         content=ad.content,
         image_url=ad.image_url,
         placement_page=normalized_page,
+        dominant_category=dominant_category,
         impression_id=impression_id,
         segment=segment,
         segment_label=segment_label,
@@ -182,7 +296,15 @@ async def get_ad_placement(
                 kmeans_segment = score_session(**features)
                 calibration = calibrate_business_segment(kmeans_segment, **features)
                 segment = int(calibration["final_segment"])
-                ml_stmt = _ml_placement_statement(normalized_page, segment)
+                dominant_category, dominant_category_ratio = _derive_category_override_signal(events)
+                if dominant_category is None:
+                    dominant_category, dominant_category_ratio = _infer_dominant_category_signal(features)
+                ml_stmt = _ml_placement_statement(
+                    normalized_page,
+                    segment,
+                    dominant_category,
+                    dominant_category_ratio,
+                )
                 candidate_count = _count_candidates(db, ml_stmt)
                 ml_placement = db.execute(ml_stmt).first()
                 if ml_placement is not None:
@@ -198,6 +320,7 @@ async def get_ad_placement(
                         campaign=campaign,
                         normalized_page=normalized_page,
                         impression_id=impression_id,
+                        dominant_category=dominant_category,
                         segment=segment,
                         segment_label=segment_label,
                         kmeans_segment=kmeans_segment,
@@ -219,7 +342,8 @@ async def get_ad_placement(
             except Exception:
                 fallback_explanation = "fallback:scoring_failed"
 
-    fallback_stmt = _fallback_placement_statement(normalized_page)
+    dominant_category = None
+    fallback_stmt = _fallback_placement_statement(normalized_page, dominant_category)
     candidate_count = _count_candidates(db, fallback_stmt)
     placement = db.execute(fallback_stmt).first()
     if placement is None:
@@ -232,6 +356,7 @@ async def get_ad_placement(
         campaign=campaign,
         normalized_page=normalized_page,
         impression_id=impression_id,
+        dominant_category=dominant_category,
         explanation=fallback_explanation,
         ranking_strategy="least_exposed_ads",
         decision_reason=_decision_reason(None, "least_exposed_ads"),

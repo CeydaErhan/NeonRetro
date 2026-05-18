@@ -70,6 +70,70 @@ For the same `home` placement, the segment changes the ranking strategy:
 
 This is the defense point: the banner is not static. The user behavior changes the segment, and the segment changes the ad selection rule.
 
+## Recent Demo Notes
+
+Recent storefront adjustments were made to make the live demo easier to explain during defense:
+
+- The dashboard defense route now includes seven deterministic scenarios:
+  - Casual
+  - Interested
+  - High Intent
+  - Window Shopper
+  - Price Sensitive
+  - Cross-Category Explorer
+  - Attribute Heavy
+- These scenarios were tuned so they separate more clearly into low, medium, and high placement outcomes.
+
+For the public storefront banner on `http://localhost:8000`:
+
+- The main ML segment still comes from KMeans session features.
+- The home-page banner uses a second category-override rule only for creative selection.
+- This override is intentionally stronger than the raw ML category ratios:
+  - `page_view` gives light category evidence
+  - `product_view` gives more evidence
+  - `open-product` gives more evidence
+  - `select-attribute` gives stronger evidence
+  - `add-to-cart` gives the strongest evidence
+- This means the debug panel can show a raw ML category ratio that still differs from the final home banner creative if recent deeper shopping actions point to a different category.
+
+Current home-banner rule:
+
+- If the weighted dominant category signal reaches at least `50%`, the storefront may show a category-specific campaign creative on the home page.
+- If it stays below `50%`, the home page keeps the generic `home` campaign creative and only the ranking strategy changes.
+
+This is a demo convenience rule, not a replacement for the main ML story:
+
+- KMeans still determines low / medium / high engagement.
+- The category override only decides whether the home banner should remain generic or switch to a category-focused campaign creative.
+
+For `offers.html` after clicking the live campaign:
+
+- If the selected campaign target is a real category such as `electronics` or `clothing`, the offers page filters to that category.
+- If the selected target is `home` or `all`, the offers page uses the current dominant category instead.
+- Product ordering on the offers page is no longer discount-only.
+- It now prefers session-aware product recommendations first, then falls back to discount, sales, and rating ordering.
+
+Visible debug aids were also added for defense troubleshooting:
+
+- On the storefront home page, the bottom-right campaign debug box now shows:
+  - dominant category
+  - full category breakdown
+  - segment
+  - ranking strategy
+  - selected campaign
+  - selected ad
+- On `offers.html`, the `SESSION RANKING DEBUG` panel shows:
+  - current campaign filter
+  - top session category
+  - session average viewed price
+  - whether ordering came from session recommendations or discount fallback
+
+Important interpretation note:
+
+- The bottom-right campaign debug box reports the ML feature-side category mix from `features_used`.
+- The final home-page banner creative may still differ because the creative override uses stronger action-weighted category intent.
+- Therefore, seeing `Electronics 50%` in the debug box while a clothing-focused banner appears can be valid if later clothing actions had stronger shopping-intent weight.
+
 ## One-Command Docker Demo
 
 From the repo root:
