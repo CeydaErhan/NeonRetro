@@ -44,6 +44,10 @@ function getStoredSessionId() {
   return null;
 }
 
+function clearStoredSessionId() {
+  window.localStorage.removeItem(SESSION_KEY);
+}
+
 async function createVisitorSession() {
   const response = await fetch(BASE_URL + '/visitor-sessions', {
     method: 'POST',
@@ -89,6 +93,16 @@ async function getSessionId() {
   return sessionIdPromise;
 }
 
+async function refreshSessionId(context = 'refreshSessionId') {
+  clearStoredSessionId();
+  try {
+    return await createVisitorSession();
+  } catch (error) {
+    reportTrackingFailure(error, context);
+    return null;
+  }
+}
+
 function getPageName() {
   const path = window.location.pathname;
   const categoryParam = new URLSearchParams(window.location.search).get('cat');
@@ -106,11 +120,20 @@ function getPageName() {
   return 'home';
 }
 
-async function sendEvent(payload) {
+function shouldRetryWithFreshSession(response) {
+  return response && (
+    response.status === 404 ||
+    response.status === 422 ||
+    response.status === 500
+  );
+}
+
+async function sendEvent(payload, retryWithFreshSession = true) {
   const sessionId = await getSessionId();
   if (!sessionId) {
     return null;
   }
+
   return fetch(BASE_URL + '/events/track', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -119,6 +142,15 @@ async function sendEvent(payload) {
       ...payload,
       session_id: sessionId
     })
+  }).then(async (response) => {
+    if (!response.ok && retryWithFreshSession && shouldRetryWithFreshSession(response)) {
+      const freshSessionId = await refreshSessionId('stale_session_recovered');
+      if (!freshSessionId) {
+        return response;
+      }
+      return sendEvent(payload, false);
+    }
+    return response;
   }).catch((error) => {
     reportTrackingFailure(error, 'sendEvent');
   });
@@ -133,7 +165,7 @@ async function trackPageview(metadata = {}) {
 }
 
 function trackClick(element, metadata = {}) {
-  sendEvent({
+  return sendEvent({
     type: 'click',
     element,
     page: getPageName(),
@@ -149,7 +181,7 @@ function track(type, element, extra = {}) {
     )
   };
 
-  sendEvent({
+  return sendEvent({
     type,
     element,
     page: getPageName(),
@@ -157,7 +189,7 @@ function track(type, element, extra = {}) {
   });
 }
 
-window.tracker = { track, trackClick, trackPageview, getSessionId };
+window.tracker = { track, trackClick, trackPageview, getSessionId, refreshSessionId, clearStoredSessionId };
 
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-track]');

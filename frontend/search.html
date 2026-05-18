@@ -44,7 +44,7 @@
   </div>
 </header>
 
-<script src="tracker.js"></script>
+<script src="tracker.js?v=defense-session-recovery"></script>
 <script>
   function goBack() { window.history.back(); }
   function handleSearch() { const q = document.getElementById('search-input')?.value.trim(); if(q) window.location.href = `search.html?q=${encodeURIComponent(q)}`; }
@@ -61,7 +61,12 @@
 <main class="max-w-7xl mx-auto px-4 py-8">
   <div class="mb-6 border-l-4 border-[#00FF88] pl-4"><h2 class="text-xl font-black text-[#00D4FF]">Results for "<span id="search-query" class="text-[#00FF88]"></span>"</h2><p id="result-count" class="text-sm text-[#00FF88] font-mono"></p></div>
   <div id="search-results" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>
-  <div id="no-results" class="text-center py-16 hidden border border-dashed border-[#FF2D75]"><i class="fas fa-search text-5xl text-[#00FF88] mb-3"></i><p class="text-[#00FF88]">NO PRODUCTS FOUND</p><a href="index.html" class="inline-block mt-4 retro-btn-neon px-6 py-2">BACK TO SHOPPING →</a></div>
+  <div id="no-results" class="text-center py-16 hidden border border-dashed border-[#FF2D75] px-4">
+    <i class="fas fa-search text-5xl text-[#00FF88] mb-3"></i>
+    <p class="text-[#00FF88] font-black">No products matched your search.</p>
+    <p class="mt-2 text-sm text-[#00D4FF] font-mono">Try a product name, category, or brand.</p>
+    <a href="index.html" class="inline-block mt-4 retro-btn-neon px-6 py-2">Browse all products →</a>
+  </div>
 </main>
 
 <script>

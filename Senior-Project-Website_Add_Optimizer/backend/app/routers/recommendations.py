@@ -520,6 +520,24 @@ def _build_suggested_products(
 ) -> list[SuggestedProductRead]:
     """Rank catalog products for one visitor session using attribute-aware preferences."""
     profile = _derive_session_preference_profile(session_id, events)
+    seen_product_ids = {
+        metadata.get("product_id")
+        for event in events
+        for metadata in [event.metadata_json or {}]
+        if isinstance(metadata.get("product_id"), int)
+    }
+
+    if (
+        profile.top_category is None
+        and profile.average_price is None
+        and not profile.preferred_brands
+        and not profile.preferred_colors
+        and not profile.preferred_sizes
+        and not profile.preferred_storage
+        and not profile.preferred_skin_types
+    ):
+        return _stable_popular_product_suggestions(limit, exclude_viewed, seen_product_ids)
+
     if PRODUCT_RANKER_PATH.exists():
         model_ranked = rank_products_with_model(events, limit=limit, exclude_viewed=exclude_viewed)
         suggestions: list[SuggestedProductRead] = []
@@ -557,13 +575,6 @@ def _build_suggested_products(
         if suggestions:
             return suggestions
 
-    seen_product_ids = {
-        metadata.get("product_id")
-        for event in events
-        for metadata in [event.metadata_json or {}]
-        if isinstance(metadata.get("product_id"), int)
-    }
-
     ranked_products: list[SuggestedProductRead] = []
     for product in _load_products_catalog():
         suggestion = _score_catalog_product(product, profile, seen_product_ids, exclude_viewed)
@@ -571,7 +582,62 @@ def _build_suggested_products(
             ranked_products.append(suggestion)
 
     ranked_products.sort(key=lambda item: (-item.score, item.price, item.name))
-    return ranked_products[:limit]
+    if ranked_products:
+        return ranked_products[:limit]
+    return _stable_popular_product_suggestions(limit, exclude_viewed, seen_product_ids)
+
+
+def _stable_popular_product_suggestions(
+    limit: int,
+    exclude_viewed: bool,
+    seen_product_ids: set[int],
+) -> list[SuggestedProductRead]:
+    """Return deterministic popular products when a session has no product signals yet."""
+    suggestions: list[SuggestedProductRead] = []
+    products = sorted(
+        _load_products_catalog(),
+        key=lambda product: (
+            -float(product.get("salesCount") or 0),
+            -float(product.get("rating") or 0),
+            str(product.get("name") or ""),
+        ),
+    )
+
+    for product in products:
+        product_id = product.get("id")
+        category = product.get("category")
+        category_name = product.get("categoryName")
+        name = product.get("name")
+        price = product.get("price")
+        image = product.get("image")
+        if exclude_viewed and isinstance(product_id, int) and product_id in seen_product_ids:
+            continue
+        if not all(
+            [
+                isinstance(product_id, int),
+                isinstance(category, str),
+                isinstance(category_name, str),
+                isinstance(name, str),
+                isinstance(price, (int, float)),
+                isinstance(image, str),
+            ]
+        ):
+            continue
+        suggestions.append(
+            SuggestedProductRead(
+                product_id=product_id,
+                name=name,
+                category=category,
+                category_name=category_name,
+                price=float(price),
+                image=image,
+                score=0.0,
+                matched_signals=["popular:fallback"],
+            )
+        )
+        if len(suggestions) >= limit:
+            break
+    return suggestions
 
 
 @router.get("")

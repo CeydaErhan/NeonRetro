@@ -65,6 +65,9 @@ class DefenseDemoStaticTests(unittest.TestCase):
         self.assertIn("moderate browsing", page)
         self.assertIn("stronger click/product signals", page)
         self.assertIn("Marketing Meaning", page)
+        self.assertIn("Run a scenario to generate an ML decision.", page)
+        self.assertIn("hasDecision", page)
+        self.assertIn("!hasDecision ?", page)
         self.assertIn("/defense-demo", app)
         self.assertIn("Defense Demo", sidebar)
 

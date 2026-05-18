@@ -101,7 +101,9 @@ export default function Campaigns() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Campaigns</h2>
-          <p className="text-sm text-slate-500">Manage website and advertisement campaign lifecycle.</p>
+          <p className="text-sm text-slate-500">
+            Manage marketing campaign lifecycle for ad placement. Campaigns do not create storefront products.
+          </p>
         </div>
 
         <button

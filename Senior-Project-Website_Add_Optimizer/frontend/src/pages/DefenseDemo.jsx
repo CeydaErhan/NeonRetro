@@ -164,6 +164,7 @@ export default function DefenseDemo() {
   const shouldShowFallbackWarning = (status && !status.model_exists) || (placement && !isRealMlPlacement(placement));
   const modelMetadata = status?.model_metadata || selectedScenario?.model_metadata || {};
   const activeScenarioKey = selectedScenario?.key || "casual";
+  const hasDecision = Boolean(placement);
 
   const selectedFeatureRows = useMemo(() => {
     const features = placement?.features_used || selectedScenario?.features_used || {};
@@ -289,6 +290,14 @@ export default function DefenseDemo() {
         ))}
       </div>
 
+      {!hasDecision ? (
+        <article className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-card">
+          <h2 className="text-lg font-semibold text-slate-900">Run a scenario to generate an ML decision.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            The feature table, raw KMeans segment, calibrated final segment, ad strategy, and selected ad preview will appear here.
+          </p>
+        </article>
+      ) : (
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <article className="rounded-xl bg-white p-5 shadow-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -377,6 +386,7 @@ export default function DefenseDemo() {
           </details>
         </article>
       </div>
+      )}
 
       <article className="rounded-xl bg-white p-5 shadow-card">
         <div>
