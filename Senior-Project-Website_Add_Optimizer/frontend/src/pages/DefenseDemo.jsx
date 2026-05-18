@@ -7,18 +7,45 @@ const MODEL_WARNING = "ML model is missing. Demo is in fallback mode.";
 const scenarioButtons = [
   {
     key: "casual",
-    label: "Run Casual Visitor Scenario",
-    description: "Short browse, low product depth"
+    label: "Casual Visitor",
+    description: "Short browse with low product depth",
+    expectedSegment: "Low"
   },
   {
     key: "interested",
-    label: "Run Interested Visitor Scenario",
-    description: "Category interest with product interaction"
+    label: "Interested Visitor",
+    description: "Category interest with product interaction",
+    expectedSegment: "Medium"
   },
   {
     key: "high-intent",
-    label: "Run High Intent Visitor Scenario",
-    description: "Deep comparison and add-to-cart behavior"
+    label: "High Intent Visitor",
+    description: "Deep comparison and add-to-cart behavior",
+    expectedSegment: "High"
+  },
+  {
+    key: "window-shopper",
+    label: "Window Shopper",
+    description: "Wide browsing without cart commitment",
+    expectedSegment: "Low"
+  },
+  {
+    key: "price-sensitive",
+    label: "Price Sensitive Visitor",
+    description: "Lower-price comparisons with cautious intent",
+    expectedSegment: "Low"
+  },
+  {
+    key: "cross-category",
+    label: "Cross-Category Explorer",
+    description: "Many categories, broad interest, no strong focus",
+    expectedSegment: "Medium"
+  },
+  {
+    key: "attribute-heavy",
+    label: "Attribute Heavy Visitor",
+    description: "Variant-focused evaluation with long dwell time",
+    expectedSegment: "High"
   }
 ];
 
@@ -27,7 +54,11 @@ const pipelineSteps = ["Visitor Behavior", "Feature Extraction", "KMeans Model",
 const scenarioExplanations = {
   casual: ["low activity", "few clicks/pages", "weak purchase intent"],
   interested: ["moderate browsing", "some product/category interest", "medium engagement"],
-  "high-intent": ["stronger click/product signals", "add-to-cart or attribute-selection behavior", "higher commercial intent"]
+  "high-intent": ["stronger click/product signals", "add-to-cart or attribute-selection behavior", "higher commercial intent"],
+  "window-shopper": ["many pages across categories", "light product depth", "no cart commitment"],
+  "price-sensitive": ["lower-price product attention", "cautious comparison behavior", "low commitment and no cart signal"],
+  "cross-category": ["high category diversity", "broad exploration pattern", "interest spread across the catalog"],
+  "attribute-heavy": ["repeated variant selections", "cart-building alongside long evaluation", "strong purchase intent"]
 };
 
 const segmentExplanationRows = [
@@ -151,6 +182,15 @@ function LiveTrackingPanel({ liveTracking, onRefresh }) {
   );
 }
 
+function SummaryCard({ label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="mt-2 text-sm font-bold text-slate-900">{formatValue(value)}</dd>
+    </div>
+  );
+}
+
 export default function DefenseDemo() {
   const [status, setStatus] = useState(null);
   const [selectedScenario, setSelectedScenario] = useState(null);
@@ -165,6 +205,37 @@ export default function DefenseDemo() {
   const modelMetadata = status?.model_metadata || selectedScenario?.model_metadata || {};
   const activeScenarioKey = selectedScenario?.key || "casual";
   const hasDecision = Boolean(placement);
+  const activeScenarioLabel = selectedScenario?.label || titleCase(activeScenarioKey);
+  const selectedSegmentLabel = titleCase(placement?.segment_label || selectedScenario?.expected_segment_label);
+  const rankingStrategy = placement?.ranking_strategy || selectedScenario?.expected_strategy;
+  const rankingStrategySummary =
+    rankingStrategy === "least_exposed_ads"
+      ? "Least exposed ads - show under-served campaigns first"
+      : rankingStrategy === "impression_popularity"
+        ? "Impression popularity - prefer ads with stronger exposure history"
+        : rankingStrategy === "ctr_performance"
+          ? "CTR performance - prefer ads with stronger click-through results"
+          : rankingStrategy;
+  const kmeansSegmentSummary = placement?.kmeans_segment_label
+    ? `${titleCase(placement.kmeans_segment_label)} - raw model output before business rules`
+    : null;
+  const businessOverrideApplied =
+    placement?.calibration_applied === undefined ? null : placement.calibration_applied ? "Yes" : "No";
+  const businessOverrideSummary =
+    placement?.calibration_applied === undefined
+      ? null
+      : placement.calibration_applied
+        ? "Yes - business rules changed the final segment"
+        : "No - final segment stayed the same as the KMeans output";
+  const businessOverrideReason =
+    placement?.calibration_applied
+      ? placement?.calibration_reason
+      : "No override needed. The final segment matches the KMeans model output.";
+  const selectedAdNarrative = !placement
+    ? "Run a visitor scenario to send seeded behavior through the KMeans placement path."
+    : isRealMlPlacement(placement)
+      ? `The model classified this session as ${titleCase(placement.segment_label)} and selected an eligible home ad using ${placement.ranking_strategy}.`
+      : "This response is not using the real KMeans placement path yet. Run the bootstrap script and re-run the scenario before the main defense demo.";
 
   const selectedFeatureRows = useMemo(() => {
     const features = placement?.features_used || selectedScenario?.features_used || {};
@@ -184,6 +255,16 @@ export default function DefenseDemo() {
 
   useEffect(() => {
     loadStatus();
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      loadStatus();
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   const runScenario = async (scenarioKey) => {
@@ -225,9 +306,7 @@ export default function DefenseDemo() {
           <div>
             <h1 className="text-2xl font-bold text-slate-950">ML Decision Demo</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Deterministic visitor scenarios pass through the same KMeans session segmentation and storefront ad placement endpoint used by NeonRetro.
-              Explicit purchase signals can calibrate a medium behavioral cluster into high commercial intent when cart and attribute-selection actions are strong.
-              Ad performance feedback updates ranking metrics, not the KMeans model.
+              Run one of the seeded visitor journeys to show how behavior features flow through KMeans segmentation and end in a different ad decision.
             </p>
           </div>
           <div className={`rounded-lg px-4 py-3 text-sm font-bold ${modelLoaded ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
@@ -248,20 +327,129 @@ export default function DefenseDemo() {
         <div className="mt-6">
           <Pipeline active={Boolean(placement)} />
         </div>
+      </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <article className="rounded-xl border border-sky-200 bg-sky-50 p-5 shadow-card">
+        <h2 className="text-lg font-semibold text-slate-900">Scenario Runner</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Choose a visitor journey, then compare the predicted segment, ranking strategy, and selected ad.
+        </p>
+      </article>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {scenarioButtons.map((scenario) => (
+          <button
+            key={scenario.key}
+            type="button"
+            onClick={() => runScenario(scenario.key)}
+            disabled={Boolean(loadingKey)}
+            className={`rounded-xl border bg-white p-5 text-left shadow-card transition hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60 ${
+              selectedScenario?.key === scenario.key ? "border-sky-700 ring-2 ring-sky-700/15 bg-sky-50" : "border-slate-200"
+            }`}
+          >
+            <span className="inline-flex rounded-full bg-slate-900 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">Scenario</span>
+            <span className="mt-3 block text-lg font-bold text-slate-950">
+              {loadingKey === scenario.key ? "Running..." : scenario.label}
+            </span>
+            <span className="mt-2 block text-sm leading-6 text-slate-500">{scenario.description}</span>
+            <span className="mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Expected segment
+            </span>
+            <span className="mt-1 block text-sm font-semibold text-slate-900">{scenario.expectedSegment}</span>
+          </button>
+        ))}
+      </div>
+
+      {!hasDecision ? (
+        <article className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-card">
+          <h2 className="text-lg font-semibold text-slate-900">Run a scenario to generate a decision.</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            The selected segment, ad ranking strategy, and ad preview will appear here first. Technical evidence stays in the expandable section below.
+          </p>
+        </article>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+          <article className="rounded-xl bg-white p-5 shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Decision Summary</h2>
+                <p className="mt-1 text-sm text-slate-500">{activeScenarioLabel}</p>
+              </div>
+              <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800">
+                Segment: {selectedSegmentLabel}
+              </div>
+            </div>
+
+            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+              <SummaryCard label="Final Business Segment" value={`${selectedSegmentLabel} - used for the ad decision`} />
+              <SummaryCard label="Ad Ranking Strategy" value={rankingStrategySummary} />
+              <SummaryCard
+                label="KMeans Model Output"
+                value={kmeansSegmentSummary}
+              />
+              <SummaryCard
+                label="Business Override Applied"
+                value={businessOverrideSummary}
+              />
+            </dl>
+
+            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-bold text-slate-900">Why this decision?</h3>
+              <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-700 sm:grid-cols-3">
+                {(scenarioExplanations[activeScenarioKey] || scenarioExplanations.casual).map((reason) => (
+                  <li key={reason} className="rounded-md bg-white px-3 py-2 font-medium">
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="text-sm font-bold text-slate-900">What changed for the business?</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                This visitor was mapped to the <span className="font-semibold text-slate-900">{selectedSegmentLabel}</span> segment,
+                so the placement engine used <span className="font-semibold text-slate-900">{formatValue(rankingStrategy)}</span> to rank eligible ads.
+              </p>
+              <p className="mt-3 text-sm leading-6 text-slate-600">{formatValue(placement?.decision_reason)}</p>
+            </div>
+          </article>
+
+          <article className="rounded-xl bg-white p-5 shadow-card">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Ad</p>
+            <h2 className="mt-3 text-xl font-bold text-slate-950">{formatValue(placement?.title)}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{formatValue(placement?.content)}</p>
+            {placement?.image_url ? (
+              <img src={placement.image_url} alt={placement.title || "Selected ad"} className="mt-5 h-56 w-full rounded-lg object-cover" />
+            ) : (
+              <div className="mt-5 flex h-56 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
+                No ad image returned
+              </div>
+            )}
+
+            <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+              {selectedAdNarrative}
+            </div>
+          </article>
+        </div>
+      )}
+
+      <details className="rounded-xl bg-white p-5 shadow-card">
+        <summary className="cursor-pointer text-lg font-semibold text-slate-900">Technical Details</summary>
+        <p className="mt-2 text-sm text-slate-500">
+          Open this section for model metadata, full feature inputs, segment mapping, live tracking, and raw payload output.
+        </p>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {[
-            ["ML Algorithm: KMeans Clustering", modelMetadata.algorithm ? `${modelMetadata.algorithm} Clustering` : "KMeans Clustering"],
-            ["Input: 15 visitor behavior features", `${modelMetadata.feature_count || 15} features`],
-            ["Preprocessing: StandardScaler", modelMetadata.scaler || modelMetadata.scaler_type || "StandardScaler"],
-            ["Output: low / medium / high engagement segment", "low / medium / high"],
-            ["Business action: segment-aware ad ranking strategy", "Segment-aware ad ranking strategy"],
-            ["Model status: Real ML model loaded", modelStatusLabel],
-            ["Training sessions", formatMetadataValue(modelMetadata.training_session_count)],
+            ["Algorithm", modelMetadata.algorithm ? `${modelMetadata.algorithm} Clustering` : "KMeans Clustering"],
+            ["Feature Count", `${modelMetadata.feature_count || 15} features`],
+            ["Scaler", modelMetadata.scaler || modelMetadata.scaler_type || "StandardScaler"],
+            ["Training Sessions", formatMetadataValue(modelMetadata.training_session_count)],
             [
-              "Silhouette score",
+              "Silhouette Score",
               formatMetadataValue(modelMetadata.silhouette_score, modelMetadata.silhouette_score_note || "not available for this model artifact")
-            ]
+            ],
+            ["Model Status", modelStatusLabel]
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
@@ -269,88 +457,61 @@ export default function DefenseDemo() {
             </div>
           ))}
         </div>
-      </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {scenarioButtons.map((scenario) => (
-          <button
-            key={scenario.key}
-            type="button"
-            onClick={() => runScenario(scenario.key)}
-            disabled={Boolean(loadingKey)}
-            className={`rounded-xl border bg-white p-5 text-left shadow-card transition hover:-translate-y-0.5 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60 ${
-              selectedScenario?.key === scenario.key ? "border-slate-900 ring-2 ring-slate-900/10" : "border-transparent"
-            }`}
-          >
-            <span className="text-sm font-bold text-slate-950">
-              {loadingKey === scenario.key ? "Running..." : scenario.label}
-            </span>
-            <span className="mt-2 block text-sm leading-6 text-slate-500">{scenario.description}</span>
-          </button>
-        ))}
-      </div>
-
-      {!hasDecision ? (
-        <article className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-card">
-          <h2 className="text-lg font-semibold text-slate-900">Run a scenario to generate an ML decision.</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            The feature table, raw KMeans segment, calibrated final segment, ad strategy, and selected ad preview will appear here.
-          </p>
-        </article>
-      ) : (
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-        <article className="rounded-xl bg-white p-5 shadow-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Decision Explanation</h2>
-              <p className="mt-1 text-sm text-slate-500">Algorithm: KMeans Clustering</p>
+        {hasDecision ? (
+          <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Input Feature</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {selectedFeatureRows.map(([label, value]) => (
+                    <tr key={label}>
+                      <td className="px-4 py-2 font-medium text-slate-900">{label}</td>
+                      <td className="px-4 py-2 text-slate-700">{value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-800">
-              Segment: {titleCase(placement?.segment_label || selectedScenario?.expected_segment_label)}
-            </div>
+
+            <dl className="grid gap-3">
+              <SummaryCard label="Business Override Reason" value={businessOverrideReason} />
+              <SummaryCard label="Candidate Count" value={placement?.candidate_count} />
+              <SummaryCard label="Decision Reason" value={placement?.decision_reason} />
+            </dl>
           </div>
+        ) : null}
 
-          <dl className="mt-5 grid gap-3 sm:grid-cols-2">
-            {[
-              ["Predicted Segment", titleCase(placement?.segment_label)],
-              ["KMeans Cluster Segment", titleCase(placement?.kmeans_segment_label)],
-              ["Calibration Applied", placement?.calibration_applied === undefined ? null : placement.calibration_applied ? "Yes" : "No"],
-              ["Calibration Reason", placement?.calibration_reason],
-              ["Ranking Strategy", placement?.ranking_strategy || selectedScenario?.expected_strategy],
-              ["Decision Reason", placement?.decision_reason],
-              ["Candidate Count", placement?.candidate_count]
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-                <dd className="mt-2 text-sm font-bold text-slate-900">{formatValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
-
-          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h3 className="text-sm font-bold text-slate-900">Why this segment?</h3>
-            <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-700 sm:grid-cols-3">
-              {(scenarioExplanations[activeScenarioKey] || scenarioExplanations.casual).map((reason) => (
-                <li key={reason} className="rounded-md bg-white px-3 py-2 font-medium">
-                  {reason}
-                </li>
-              ))}
-            </ul>
+        <article className="mt-5 rounded-xl border border-slate-200 p-5">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Cluster to Segment Mapping</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              KMeans assigns a cluster from the behavior features, then the backend maps that cluster to a stable business segment.
+            </p>
           </div>
-
           <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Input features table</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Value</th>
+                  {["Segment", "Behavior Pattern", "Ad Strategy", "Marketing Meaning"].map((heading) => (
+                    <th key={heading} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {selectedFeatureRows.map(([label, value]) => (
-                  <tr key={label}>
-                    <td className="px-4 py-2 font-medium text-slate-900">{label}</td>
-                    <td className="px-4 py-2 text-slate-700">{value}</td>
+                {segmentExplanationRows.map(([segment, behaviorPattern, adStrategy, marketingMeaning]) => (
+                  <tr key={segment}>
+                    <td className="px-4 py-3 font-bold text-slate-900">{segment}</td>
+                    <td className="px-4 py-3 text-slate-700">{behaviorPattern}</td>
+                    <td className="px-4 py-3 font-semibold text-slate-800">{adStrategy}</td>
+                    <td className="px-4 py-3 text-slate-700">{marketingMeaning}</td>
                   </tr>
                 ))}
               </tbody>
@@ -358,69 +519,17 @@ export default function DefenseDemo() {
           </div>
         </article>
 
-        <article className="rounded-xl bg-white p-5 shadow-card">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Ad Preview</p>
-          <h2 className="mt-3 text-xl font-bold text-slate-950">{formatValue(placement?.title)}</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">{formatValue(placement?.content)}</p>
-          {placement?.image_url ? (
-            <img src={placement.image_url} alt={placement.title || "Selected ad"} className="mt-5 h-56 w-full rounded-lg object-cover" />
-          ) : (
-            <div className="mt-5 flex h-56 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 text-sm text-slate-500">
-              No ad image returned
-            </div>
-          )}
-
-          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-            {!placement
-              ? "Run a visitor scenario to send seeded behavior through the KMeans placement path."
-              : isRealMlPlacement(placement)
-              ? `The model classified this session as ${titleCase(placement.segment_label)} and selected an eligible home ad using ${placement.ranking_strategy}.`
-              : "This response is not using the real KMeans placement path yet. Run the bootstrap script and re-run the scenario before the main defense demo."}
-          </div>
-
-          <details className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
-            <summary className="cursor-pointer text-sm font-semibold text-slate-900">Technical Details</summary>
-            <pre className="mt-4 max-h-80 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">
-              {JSON.stringify(rawPayload || { status }, null, 2)}
-            </pre>
-          </details>
-        </article>
-      </div>
-      )}
-
-      <article className="rounded-xl bg-white p-5 shadow-card">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Cluster to Segment Explanation</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            KMeans assigns a cluster from the 15 scaled behavior features, then the backend maps that cluster to a stable business segment.
-          </p>
+        <div className="mt-5">
+          <LiveTrackingPanel liveTracking={status?.live_tracking} onRefresh={loadStatus} />
         </div>
-        <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                {["Segment", "Behavior Pattern", "Ad Strategy", "Marketing Meaning"].map((heading) => (
-                  <th key={heading} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {segmentExplanationRows.map(([segment, behaviorPattern, adStrategy, marketingMeaning]) => (
-                <tr key={segment}>
-                  <td className="px-4 py-3 font-bold text-slate-900">{segment}</td>
-                  <td className="px-4 py-3 text-slate-700">{behaviorPattern}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-800">{adStrategy}</td>
-                  <td className="px-4 py-3 text-slate-700">{marketingMeaning}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </article>
 
-      <LiveTrackingPanel liveTracking={status?.live_tracking} onRefresh={loadStatus} />
+        <details className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Raw Payload</summary>
+          <pre className="mt-4 max-h-80 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-5 text-slate-100">
+            {JSON.stringify(rawPayload || { status }, null, 2)}
+          </pre>
+        </details>
+      </details>
     </section>
   );
 }

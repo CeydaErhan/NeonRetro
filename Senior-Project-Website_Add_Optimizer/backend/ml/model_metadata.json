@@ -34,9 +34,9 @@
     "low": "least_exposed_ads",
     "medium": "impression_popularity"
   },
-  "silhouette_score": 0.3386,
+  "silhouette_score": 0.2776,
   "silhouette_score_note": null,
-  "trained_at": "2026-05-18T14:53:12.349143+00:00",
-  "training_session_count": 63,
+  "trained_at": "2026-05-18T19:13:58.038978+00:00",
+  "training_session_count": 37,
   "training_source": "real_db_sessions"
 }

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Ad, Campaign, Event, Impression, User, VisitorSession
-from app.schemas import VisitorsByDayRead
+from app.schemas import CampaignPerformanceRead, VisitorsByDayRead
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -21,6 +21,7 @@ async def analytics_summary(_: User = Depends(get_current_user), db: Session = D
     """Return high-level analytics metrics across sessions, events, and ads."""
     session_total = db.scalar(select(func.count(VisitorSession.id)))
     event_total = db.scalar(select(func.count(Event.id)))
+    page_view_total = db.scalar(select(func.count(Event.id)).where(Event.type.in_(["page_view", "pageview"])))
     ad_total = db.scalar(select(func.count(Ad.id)))
     impression_total = db.scalar(select(func.count(Impression.id)))
     click_total = db.scalar(select(func.count(Impression.id)).where(Impression.clicked.is_(True)))
@@ -32,6 +33,7 @@ async def analytics_summary(_: User = Depends(get_current_user), db: Session = D
     return {
         "sessions": int(session_total or 0),
         "events": int(event_total or 0),
+        "page_views": int(page_view_total or 0),
         "ads": int(ad_total or 0),
         "impressions": int(impressions),
         "clicks": int(clicks),
@@ -75,6 +77,25 @@ async def visitors_by_day(
 @router.get("/export")
 async def analytics_export(_: User = Depends(get_current_user), db: Session = Depends(get_db)) -> StreamingResponse:
     """Export campaign-level impression and click metrics as a CSV report."""
+    rows = _campaign_performance_rows(db)
+
+    buffer = StringIO()
+    buffer.write("campaign_id,campaign_name,impressions,clicks,ctr\n")
+    for row in rows:
+        buffer.write(
+            f"{row.campaign_id},{row.campaign_name},{row.impressions},{row.clicks},{row.ctr:.4f}\n"
+        )
+
+    buffer.seek(0)
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=analytics_export.csv"},
+    )
+
+
+def _campaign_performance_rows(db: Session) -> list[CampaignPerformanceRead]:
+    """Return campaign-level impression, click, and CTR metrics."""
     stmt = (
         select(
             Campaign.id,
@@ -86,21 +107,31 @@ async def analytics_export(_: User = Depends(get_current_user), db: Session = De
         .join(Ad, Ad.campaign_id == Campaign.id, isouter=True)
         .join(Impression, Impression.ad_id == Ad.id, isouter=True)
         .group_by(Campaign.id, Campaign.name)
-        .order_by(Campaign.id.asc())
+        .order_by(func.count(Impression.id).desc(), Campaign.id.asc())
     )
     rows = db.execute(stmt).all()
 
-    buffer = StringIO()
-    buffer.write("campaign_id,campaign_name,impressions,clicks,ctr\n")
+    performance_rows: list[CampaignPerformanceRead] = []
     for campaign_id, campaign_name, impressions, clicks in rows:
         imp = int(impressions or 0)
         clk = int(clicks or 0)
         ctr = (clk / imp) if imp else 0.0
-        buffer.write(f"{campaign_id},{campaign_name},{imp},{clk},{ctr:.4f}\n")
+        performance_rows.append(
+            CampaignPerformanceRead(
+                campaign_id=int(campaign_id),
+                campaign_name=str(campaign_name),
+                impressions=imp,
+                clicks=clk,
+                ctr=round(ctr, 4),
+            )
+        )
+    return performance_rows
 
-    buffer.seek(0)
-    return StreamingResponse(
-        iter([buffer.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=analytics_export.csv"},
-    )
+
+@router.get("/campaign-performance", response_model=list[CampaignPerformanceRead])
+async def campaign_performance(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[CampaignPerformanceRead]:
+    """Return campaign-level ad performance for the business dashboard."""
+    return _campaign_performance_rows(db)

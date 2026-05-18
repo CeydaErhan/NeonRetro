@@ -42,6 +42,11 @@
 <main class="max-w-7xl mx-auto px-4 py-8">
   <div class="mb-8 text-center">
     <div class="inline-block bg-[#FF2D75] text-black px-4 py-2 font-black text-sm">🔥 DEALS UP TO 70% OFF 🔥</div>
+    <p id="offers-context" class="mt-3 text-xs font-mono text-[#00D4FF]"></p>
+  </div>
+  <div id="offers-ranking-debug" class="mb-6 hidden border border-[#00FF88] bg-[#00FF88]/5 p-4 text-left">
+    <div class="text-[10px] font-black tracking-[0.25em] text-[#00FF88]">SESSION RANKING DEBUG</div>
+    <div id="offers-ranking-debug-body" class="mt-2 space-y-1 text-[11px] font-mono text-[#00D4FF]"></div>
   </div>
   
   <div id="discount-products" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>
@@ -50,21 +55,109 @@
 <script src="tracker.js?v=defense-session-recovery"></script>
 <script>
   const catNames = { electronics:'💾 Electronics', clothing:'👾 Clothing', beauty:'✨ Beauty', 'home-appliances':'🏠 Home Appliances', books:'📖 Books', sports:'🏋️ Sports' };
+  const validCategoryTargets = new Set(Object.keys(catNames));
+  const queryCategoryParam = new URLSearchParams(window.location.search).get('cat');
+  const storedCampaignTarget = window.sessionStorage.getItem('neon_campaign_target');
+  const rawCampaignTarget = queryCategoryParam || storedCampaignTarget;
+  const categoryParam = validCategoryTargets.has(rawCampaignTarget) ? rawCampaignTarget : null;
   
   let allProducts = [];
+  let rankedRecommendationIds = [];
+  let sessionPreferenceProfile = null;
   function getCart(){return JSON.parse(localStorage.getItem('neon_cart')||'[]');}
   function saveCart(cart){localStorage.setItem('neon_cart',JSON.stringify(cart));}
+  function getStoreApiBaseUrl(){ if(window.NEON_API_BASE_URL) return window.NEON_API_BASE_URL.replace(/\/$/,''); const hostname=window.location.hostname; if(hostname==='localhost'||hostname==='127.0.0.1') return 'http://localhost:10000'; return 'https://senior-project-website-add-optimizer.onrender.com'; }
   function buildProductTrackingMetadata(product){const attributes=product?.attributes||{}; const availableAttributes={}; Object.entries(attributes).forEach(([key,value])=>{availableAttributes[key]=Array.isArray(value)?[...value]:value;}); return {product_id:product?.id??null,product_name:product?.name??null,category:product?.category??null,category_name:product?.categoryName??null,price:product?.price??null,discount:product?.discount??0,stock:product?.stock??null,available_attributes:availableAttributes};}
   function trackCatalogInteraction(element,product,extraMetadata={}){if(!window.tracker?.track||!product)return; tracker.track('click',element,{metadata:{...buildProductTrackingMetadata(product),...extraMetadata}});}
   function goToProduct(productId){const product=allProducts.find(p=>p.id===productId); trackCatalogInteraction('open-product',product,{source:'offers'}); window.location.href=`product.html?id=${productId}`;}
   function addToCart(product){const cart=getCart(); const e=cart.find(i=>i.id===product.id); e?e.quantity++:cart.push({id:product.id,name:product.name,price:product.price,image:product.image,quantity:1}); saveCart(cart); trackCatalogInteraction('add-to-cart',product,{source:'offers',quantity:1,cart_size_after_add:cart.reduce((sum,item)=>sum+item.quantity,0)}); showToast(`🛒 ${product.name} added to cart`);}
   function showToast(m){let t=document.getElementById('toast'); if(!t){t=document.createElement('div'); t.id='toast'; t.className='fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-black border border-[#00FF88] text-[#00FF88] px-6 py-3 text-sm font-mono z-50 opacity-0 transition'; document.body.appendChild(t);} t.innerText=m; t.classList.remove('opacity-0'); setTimeout(()=>t.classList.add('opacity-0'),2000);}
+  function formatCurrency(value){ return typeof value==='number' && !Number.isNaN(value) ? `$${value.toFixed(2)}` : 'unknown'; }
+  function renderOffersRankingDebug() {
+    const panel = document.getElementById('offers-ranking-debug');
+    const body = document.getElementById('offers-ranking-debug-body');
+    if (!panel || !body) return;
+
+    const lines = [];
+    if (categoryParam && catNames[categoryParam]) {
+      lines.push(`Campaign filter: ${catNames[categoryParam]}`);
+    } else {
+      lines.push('Campaign filter: all categories');
+    }
+
+    if (sessionPreferenceProfile?.top_category) {
+      lines.push(`Top session category: ${catNames[sessionPreferenceProfile.top_category] || sessionPreferenceProfile.top_category}`);
+    }
+
+    if (typeof sessionPreferenceProfile?.average_price === 'number') {
+      lines.push(`Session average viewed price: ${formatCurrency(sessionPreferenceProfile.average_price)}`);
+    }
+
+    if (rankedRecommendationIds.length) {
+      lines.push('Ranking rule: session recommendations first, then discount / sales / rating');
+    } else {
+      lines.push('Ranking rule: discount first, then sales / rating fallback');
+    }
+
+    body.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
+    panel.classList.remove('hidden');
+  }
+  async function loadRecommendedOrder() {
+    if (!window.tracker?.getSessionId) return;
+    try {
+      const sessionId = await window.tracker.getSessionId();
+      if (!sessionId) return;
+      const preferenceResponse = await fetch(`${getStoreApiBaseUrl()}/recommendations/public-session-preferences?session_id=${sessionId}`);
+      if (preferenceResponse.ok) {
+        sessionPreferenceProfile = await preferenceResponse.json();
+      }
+      const response = await fetch(`${getStoreApiBaseUrl()}/recommendations/public-suggested-products?session_id=${sessionId}&limit=24&exclude_viewed=false`);
+      if (!response.ok) return;
+      const items = await response.json();
+      rankedRecommendationIds = Array.isArray(items) ? items.map(item => item.product_id).filter(id => Number.isInteger(id)) : [];
+    } catch (_) {}
+  }
+  function sortDealsForSession(products) {
+    if (!rankedRecommendationIds.length) {
+      return products.sort((a,b) => b.discount - a.discount || b.salesCount - a.salesCount || b.rating - a.rating);
+    }
+    const rankIndex = new Map(rankedRecommendationIds.map((id, index) => [id, index]));
+    return products.sort((a, b) => {
+      const aRank = rankIndex.has(a.id) ? rankIndex.get(a.id) : Number.MAX_SAFE_INTEGER;
+      const bRank = rankIndex.has(b.id) ? rankIndex.get(b.id) : Number.MAX_SAFE_INTEGER;
+      if (aRank !== bRank) return aRank - bRank;
+      return b.discount - a.discount || b.salesCount - a.salesCount || b.rating - a.rating;
+    });
+  }
   
   async function loadDiscountProducts() {
-      const response = await fetch('data/products.json');
+    await loadRecommendedOrder();
+    const response = await fetch('data/products.json');
     allProducts = await response.json();
-    const discounted = allProducts.map((p, index) => ({ ...p, discount: p.discount > 0 ? p.discount : ((index % 5) + 1) * 10 })).sort((a,b) => b.discount - a.discount);
+    const context = document.getElementById('offers-context');
+    let discounted = allProducts.map((p, index) => ({ ...p, discount: p.discount > 0 ? p.discount : ((index % 5) + 1) * 10 }));
+
+    if (categoryParam && catNames[categoryParam]) {
+      discounted = discounted.filter(product => product.category === categoryParam);
+      if (context) context.innerText = `Campaign focus: ${catNames[categoryParam]} | Ranking adapts to this session's recommendation signals`;
+      document.title = `${catNames[categoryParam].replace(/^[^\s]+\s/, '')} Deals | NEONRETRO`;
+      if (!queryCategoryParam) {
+        const nextUrl = `${window.location.pathname}?cat=${encodeURIComponent(categoryParam)}`;
+        window.history.replaceState({}, '', nextUrl);
+      }
+    } else if (context) {
+      context.innerText = rankedRecommendationIds.length
+        ? 'Campaign focus: All categories | Ranking adapts to this session\'s recommendation signals'
+        : 'Campaign focus: All categories';
+    }
+
+    discounted = sortDealsForSession(discounted);
+    renderOffersRankingDebug();
     const container = document.getElementById('discount-products');
+    if (!discounted.length) {
+      container.innerHTML = '<div class="col-span-full border border-dashed border-[#FF2D75] p-8 text-center text-[#00FF88] font-mono">No campaign deals found for this category.</div>';
+      return;
+    }
     container.innerHTML = discounted.map(p => {
       const final = (p.price * (1 - p.discount / 100)).toFixed(2);
       return `<div onclick="goToProduct(${p.id})" class="neon-card overflow-hidden"><div class="relative aspect-square border-b border-[#00FF88]"><img src="${p.image}" class="w-full h-full object-cover"><span class="absolute top-1 left-1 bg-[#FF2D75] text-black text-xs font-black px-2 py-1">-%${p.discount}</span></div><div class="p-2"><span class="text-[9px] text-[#00D4FF]">${catNames[p.category] || p.categoryName}</span><h3 class="font-bold text-xs text-[#00FF88] truncate">${p.name}</h3><div class="flex justify-between items-center mt-1"><span class="text-[#FF2D75] font-black">$${final}</span><span class="text-[9px] line-through text-gray-500">$${p.price}</span></div><button onclick="event.stopPropagation();addToCart(${JSON.stringify(p).replace(/"/g,'&quot;')})" class="w-full retro-btn-neon text-[10px] py-1 mt-2">ADD TO CART</button></div></div>`;

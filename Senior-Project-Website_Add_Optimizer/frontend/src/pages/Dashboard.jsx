@@ -16,29 +16,12 @@ const TOKEN_KEY = "optimizer_jwt_token";
 const initialSummary = {
   sessions: 0,
   events: 0,
+  page_views: 0,
   ads: 0,
   impressions: 0,
   clicks: 0,
   ctr: 0
 };
-
-const placementFeatureRows = [
-  ["page_count", "Page Count"],
-  ["click_count", "Click Count"],
-  ["dwell_time_seconds", "Dwell Time Seconds"],
-  ["unique_products", "Unique Products"],
-  ["add_to_cart_count", "Add To Cart Count"],
-  ["attribute_selection_count", "Attribute Selection Count"],
-  ["avg_price", "Avg Price"],
-  ["price_stddev", "Price Stddev"],
-  ["category_diversity", "Category Diversity"],
-  ["electronics_ratio", "Electronics Ratio"],
-  ["clothing_ratio", "Clothing Ratio"],
-  ["beauty_ratio", "Beauty Ratio"],
-  ["home_appliances_ratio", "Home Appliances Ratio"],
-  ["books_ratio", "Books Ratio"],
-  ["sports_ratio", "Sports Ratio"]
-];
 
 function buildAuthorizationHeader(token) {
   if (!token) {
@@ -58,165 +41,100 @@ function formatChartDay(date) {
   return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(date);
 }
 
-function formatDateKey(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function buildVisitorsByDay(rows) {
+function buildPageViewsByDay(rows) {
   return rows.map((row) => {
     const date = row?.day ? new Date(row.day) : null;
     if (!date || Number.isNaN(date.getTime())) {
       return {
         day: "-",
-        visitors: Number(row?.visitors ?? 0)
+        pageViews: Number(row?.visitors ?? 0)
       };
     }
 
     return {
       day: formatChartDay(date),
-      visitors: Number(row?.visitors ?? 0)
+      pageViews: Number(row?.visitors ?? 0)
     };
   });
 }
 
-function buildCampaignChartData(campaigns, events) {
-  const campaignData = campaigns
-    .filter((campaign) => typeof campaign?.name === "string" && campaign.name.trim())
-    .map((campaign) => ({
-      label: campaign.name,
-      value: Number(campaign.impressions ?? 0)
-    }));
-
-  if (campaignData.some((item) => item.value > 0)) {
-    return {
-      title: "Impressions Per Campaign",
-      data: campaignData.map((item) => ({
-        campaign: item.label,
-        impressions: item.value
-      }))
-    };
-  }
-
-  const pageCounts = new Map();
-  events.forEach((event) => {
-    const page = typeof event?.page === "string" && event.page.trim() ? event.page : "Unknown";
-    pageCounts.set(page, (pageCounts.get(page) ?? 0) + 1);
-  });
-
-  const fallbackData = [...pageCounts.entries()]
-    .sort((left, right) => right[1] - left[1])
+function buildCampaignChartData(rows) {
+  return rows
     .slice(0, 6)
-    .map(([page, count]) => ({
-      campaign: page,
-      impressions: count
+    .map((row) => ({
+      campaign: row.campaign_name,
+      impressions: Number(row.impressions ?? 0)
     }));
-
-  return {
-    title: "Event Counts Per Page",
-    data: fallbackData
-  };
 }
 
-function formatDemoValue(value) {
-  if (value === null || value === undefined || value === "") {
-    return "Not returned";
-  }
-
-  return String(value);
+function formatPercent(value) {
+  return `${(Number(value ?? 0) * 100).toFixed(2)}%`;
 }
 
-function formatFeatureValue(value) {
-  if (value === null || value === undefined || value === "") {
-    return "Not returned";
-  }
-
-  if (typeof value === "number") {
-    return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(3);
-  }
-
-  return String(value);
-}
-
-// Shows top-level KPIs and quick trend charts for the dashboard home.
+// Shows business-facing traffic and ad performance KPIs.
 export default function Dashboard() {
   const [summary, setSummary] = useState(initialSummary);
-  const [visitorsByDay, setVisitorsByDay] = useState(() => buildVisitorsByDay([]));
-  const [campaignChart, setCampaignChart] = useState({
-    title: "Impressions Per Campaign",
-    data: []
-  });
+  const [pageViewsByDay, setPageViewsByDay] = useState(() => buildPageViewsByDay([]));
+  const [campaignPerformance, setCampaignPerformance] = useState([]);
   const [error, setError] = useState("");
-  const [demoPage, setDemoPage] = useState("home");
-  const [demoSessionId, setDemoSessionId] = useState("");
-  const [demoPlacement, setDemoPlacement] = useState(undefined);
-  const [demoError, setDemoError] = useState("");
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadDashboard = async () => {
       try {
         const headers = getAuthHeaders();
-        const [summaryResponse, visitorsResponse, eventsResponse, campaignsResponse] = await Promise.all([
+        const [summaryResponse, visitorsResponse, campaignPerformanceResponse] = await Promise.all([
           api.get("/analytics/summary", { headers }),
           api.get("/analytics/visitors-by-day", { headers }),
-          api.get("/events/list", { headers }),
-          api.get("/campaigns", { headers })
+          api.get("/analytics/campaign-performance", { headers })
         ]);
-        const events = Array.isArray(eventsResponse.data) ? eventsResponse.data : [];
-        const campaigns = Array.isArray(campaignsResponse.data) ? campaignsResponse.data : [];
+
+        if (!isMounted) {
+          return;
+        }
+
         const visitors = Array.isArray(visitorsResponse.data) ? visitorsResponse.data : [];
+        const campaigns = Array.isArray(campaignPerformanceResponse.data) ? campaignPerformanceResponse.data : [];
 
         setSummary({ ...initialSummary, ...summaryResponse.data });
-        setVisitorsByDay(buildVisitorsByDay(visitors));
-        setCampaignChart(buildCampaignChartData(campaigns, events));
+        setPageViewsByDay(buildPageViewsByDay(visitors));
+        setCampaignPerformance(campaigns);
         setError("");
       } catch (err) {
+        if (!isMounted) {
+          return;
+        }
         const detail = err?.response?.data?.detail;
         setError(typeof detail === "string" && detail.trim() ? detail : "Failed to load dashboard metrics.");
       }
     };
 
     loadDashboard();
+    const intervalId = window.setInterval(loadDashboard, 5000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+    };
   }, []);
 
-  const handlePlacementDemo = async (event) => {
-    event.preventDefault();
-    setIsDemoLoading(true);
-    setDemoError("");
-    setDemoPlacement(undefined);
-
-    const page = demoPage.trim() || "home";
-    const sessionId = demoSessionId.trim();
-    const params = { page };
-
-    if (sessionId) {
-      params.session_id = sessionId;
-    }
-
-    try {
-      const response = await api.get("/ads/placement", { params });
-      setDemoPage(page);
-      setDemoPlacement(response.data ?? null);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setDemoError(typeof detail === "string" && detail.trim() ? detail : "Failed to load ad placement.");
-    } finally {
-      setIsDemoLoading(false);
-    }
-  };
-
   const kpis = [
-    { label: "Total Sessions", value: summary.sessions.toLocaleString(), change: "Live data" },
-    { label: "Tracked Events", value: summary.events.toLocaleString(), change: "Live data" },
-    { label: "Total Impressions", value: summary.impressions.toLocaleString(), change: "Live data" },
-    { label: "Avg CTR", value: `${(summary.ctr * 100).toFixed(2)}%`, change: `${summary.clicks.toLocaleString()} clicks` }
+    { label: "Total Sessions", value: summary.sessions.toLocaleString(), change: "Store traffic" },
+    { label: "Page Views", value: summary.page_views.toLocaleString(), change: "Tracked storefront page loads" },
+    { label: "Ad Impressions", value: summary.impressions.toLocaleString(), change: "Ads served to sessions" },
+    { label: "CTR", value: formatPercent(summary.ctr), change: `${summary.clicks.toLocaleString()} ad clicks` }
   ];
-  const isFallbackPlacement =
-    demoPlacement &&
-    (demoPlacement.explanation?.startsWith("fallback:") || demoPlacement.fallback_reason || !demoPlacement.segment_label);
+
+  const campaignChartData = buildCampaignChartData(campaignPerformance);
 
   return (
     <section className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900">Business Dashboard</h2>
+        <p className="text-sm text-slate-500">Traffic, ad reach, and campaign performance from the live backend.</p>
+      </div>
+
       {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
       ) : null}
@@ -231,27 +149,33 @@ export default function Dashboard() {
         ))}
       </div>
 
+      <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-card">
+        Dashboard data refreshes automatically every 5 seconds and reflects storefront traffic plus ad-serving activity.
+      </article>
+
       <div className="grid gap-6 xl:grid-cols-2">
         <article className="rounded-2xl bg-white p-5 shadow-card">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">Visitors Over Last 7 Days</h2>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Page Views Over Last 7 Days</h2>
+          <p className="mb-4 text-sm text-slate-500">Daily storefront page-load volume.</p>
           <div className="h-72 w-full">
             <ResponsiveContainer>
-              <LineChart data={visitorsByDay}>
+              <LineChart data={pageViewsByDay}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="day" stroke="#64748b" />
                 <YAxis stroke="#64748b" />
                 <Tooltip />
-                <Line type="monotone" dataKey="visitors" stroke="#0f172a" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="pageViews" stroke="#0f172a" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </article>
 
         <article className="rounded-2xl bg-white p-5 shadow-card">
-          <h2 className="mb-4 text-lg font-semibold text-slate-900">{campaignChart.title}</h2>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Ad Performance by Campaign</h2>
+          <p className="mb-4 text-sm text-slate-500">Top campaigns ranked by total impressions.</p>
           <div className="h-72 w-full">
             <ResponsiveContainer>
-              <BarChart data={campaignChart.data}>
+              <BarChart data={campaignChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="campaign" stroke="#64748b" />
                 <YAxis stroke="#64748b" />
@@ -263,139 +187,50 @@ export default function Dashboard() {
         </article>
       </div>
 
-      <article className="rounded-2xl bg-white p-5 shadow-card">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">ML Placement Demo</h2>
-            <p className="mt-1 text-sm text-slate-500">Run the storefront placement endpoint for a page and session.</p>
-          </div>
+      <article className="overflow-hidden rounded-2xl bg-white shadow-card">
+        <div className="border-b border-slate-200 px-5 py-4">
+          <h3 className="text-lg font-semibold text-slate-900">Top Campaigns</h3>
+          <p className="mt-1 text-sm text-slate-500">Campaign-level impression, click, and CTR performance.</p>
         </div>
 
-        <form className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr_auto]" onSubmit={handlePlacementDemo}>
-          <div>
-            <label htmlFor="placement-page" className="mb-1 block text-sm font-medium text-slate-700">
-              Page
-            </label>
-            <input
-              id="placement-page"
-              type="text"
-              value={demoPage}
-              onChange={(event) => setDemoPage(event.target.value)}
-              placeholder="home"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-slate-300 transition focus:ring"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="placement-session" className="mb-1 block text-sm font-medium text-slate-700">
-              Session ID
-            </label>
-            <input
-              id="placement-session"
-              type="text"
-              value={demoSessionId}
-              onChange={(event) => setDemoSessionId(event.target.value)}
-              placeholder="123"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-slate-300 transition focus:ring"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={isDemoLoading}
-              className="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60 lg:w-auto"
-            >
-              {isDemoLoading ? "Loading..." : "Run Placement Demo"}
-            </button>
-          </div>
-        </form>
-
-        {demoError ? (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{demoError}</p>
-        ) : null}
-
-        {demoPlacement === null ? (
-          <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            No ad returned for this placement.
-          </p>
-        ) : null}
-
-        {demoPlacement ? (
-          <div className="mt-5 space-y-5">
-            {isFallbackPlacement ? (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
-                ML model is missing. Demo is in fallback mode.
-              </p>
-            ) : null}
-
-            <div className="rounded-xl border border-slate-200 p-4">
-              <h3 className="text-base font-semibold text-slate-900">Why this ad was selected?</h3>
-              <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">
-                <div className="rounded-lg bg-slate-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selected Ad Preview</p>
-                  <h4 className="mt-2 text-lg font-semibold text-slate-900">{formatDemoValue(demoPlacement.title)}</h4>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">{formatDemoValue(demoPlacement.content)}</p>
-                  {demoPlacement.image_url ? (
-                    <img
-                      src={demoPlacement.image_url}
-                      alt={demoPlacement.title || "Placement ad"}
-                      className="mt-4 h-44 w-full rounded-lg object-cover"
-                    />
-                  ) : (
-                    <p className="mt-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
-                      No image URL returned.
-                    </p>
-                  )}
-                </div>
-
-                <dl className="grid gap-3 rounded-lg bg-slate-50 p-4 text-sm">
-                  {[
-                    ["Segment", demoPlacement.segment],
-                    ["Segment Label", demoPlacement.segment_label],
-                    ["Ranking Strategy", demoPlacement.ranking_strategy],
-                    ["Model Version", demoPlacement.model_version],
-                    ["Explanation", demoPlacement.explanation],
-                    ["Decision Reason", demoPlacement.decision_reason],
-                    ["Candidate Count", demoPlacement.candidate_count],
-                    ["Fallback Reason", demoPlacement.fallback_reason],
-                    ["Impression ID", demoPlacement.impression_id]
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-                      <dd className="mt-1 break-words font-medium text-slate-900">{formatDemoValue(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-xl border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Feature Used
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Value
-                    </th>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Campaign
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Impressions
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Clicks
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  CTR
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {campaignPerformance.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="px-4 py-6 text-sm text-slate-500">
+                    No campaign performance data available yet.
+                  </td>
+                </tr>
+              ) : (
+                campaignPerformance.map((campaign) => (
+                  <tr key={campaign.campaign_id}>
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900">{campaign.campaign_name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{campaign.impressions.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{campaign.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm text-slate-700">{formatPercent(campaign.ctr)}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {placementFeatureRows.map(([key, label]) => (
-                    <tr key={key} className="hover:bg-slate-50/70">
-                      <td className="px-4 py-2 font-medium text-slate-900">{label}</td>
-                      <td className="px-4 py-2 text-slate-700">
-                        {formatFeatureValue(demoPlacement.features_used?.[key])}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </article>
     </section>
   );
