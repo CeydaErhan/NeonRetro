@@ -6,6 +6,7 @@ COMPOSE_FILE="$ROOT_DIR/Senior-Project-Website_Add_Optimizer/docker-compose.yml"
 BACKEND_URL="${BACKEND_URL:-http://localhost:10000}"
 SESSIONS_PER_SEGMENT="${SESSIONS_PER_SEGMENT:-20}"
 MIN_SESSIONS="${MIN_SESSIONS:-30}"
+TRAINING_LIMIT="$((SESSIONS_PER_SEGMENT * 3 + 3))"
 DOCKER_BIN="${DOCKER_BIN:-}"
 
 if [[ -z "$DOCKER_BIN" ]]; then
@@ -77,7 +78,7 @@ echo "Seeding ML training sessions..."
 "$DOCKER_BIN" compose -f "$COMPOSE_FILE" exec -T backend python scripts/seed_ml_demo_sessions.py --reset-demo --sessions-per-segment "$SESSIONS_PER_SEGMENT"
 
 echo "Training KMeans model..."
-"$DOCKER_BIN" compose -f "$COMPOSE_FILE" exec -T backend python scripts/train_model.py --min-sessions "$MIN_SESSIONS"
+"$DOCKER_BIN" compose -f "$COMPOSE_FILE" exec -T backend python scripts/train_model.py --min-sessions "$MIN_SESSIONS" --limit "$TRAINING_LIMIT"
 
 echo "Running defense checks..."
 "$ROOT_DIR/scripts/run_defense_checks.sh"

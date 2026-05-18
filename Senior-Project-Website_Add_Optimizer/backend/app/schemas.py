@@ -227,6 +227,10 @@ class AdPlacementRead(BaseModel):
     impression_id: int | None = None
     segment: int | None = None
     segment_label: str | None = None
+    kmeans_segment: int | None = None
+    kmeans_segment_label: str | None = None
+    calibration_applied: bool | None = None
+    calibration_reason: str | None = None
     ranking_strategy: str | None = None
     model_version: str | None = None
     explanation: str | None = None

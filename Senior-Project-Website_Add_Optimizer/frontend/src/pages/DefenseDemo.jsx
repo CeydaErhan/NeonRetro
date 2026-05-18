@@ -225,6 +225,7 @@ export default function DefenseDemo() {
             <h1 className="text-2xl font-bold text-slate-950">ML Decision Demo</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Deterministic visitor scenarios pass through the same KMeans session segmentation and storefront ad placement endpoint used by NeonRetro.
+              Explicit purchase signals can calibrate a medium behavioral cluster into high commercial intent when cart and attribute-selection actions are strong.
             </p>
           </div>
           <div className={`rounded-lg px-4 py-3 text-sm font-bold ${modelLoaded ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
@@ -302,6 +303,9 @@ export default function DefenseDemo() {
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">
             {[
               ["Predicted Segment", titleCase(placement?.segment_label)],
+              ["KMeans Cluster Segment", titleCase(placement?.kmeans_segment_label)],
+              ["Calibration Applied", placement?.calibration_applied === undefined ? null : placement.calibration_applied ? "Yes" : "No"],
+              ["Calibration Reason", placement?.calibration_reason],
               ["Ranking Strategy", placement?.ranking_strategy || selectedScenario?.expected_strategy],
               ["Decision Reason", placement?.decision_reason],
               ["Candidate Count", placement?.candidate_count]

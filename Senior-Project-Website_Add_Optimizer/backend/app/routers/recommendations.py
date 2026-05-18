@@ -20,6 +20,7 @@ from app.schemas import (
     SessionProfileRead,
     SuggestedProductRead,
 )
+from ml.calibration import calibrate_business_segment
 from ml.product_ranker import PRODUCT_RANKER_PATH, rank_products_with_model
 from ml.recommendation import get_recommendations as get_segment_recommendations
 from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, SEGMENT_LABELS, load_model_metadata, score_session
@@ -587,8 +588,11 @@ async def list_recommendations(
         .all()
     )
     features = _derive_session_ml_features(visitor_session, events)
-    segment = score_session(**features)
+    kmeans_segment = score_session(**features)
+    calibration = calibrate_business_segment(kmeans_segment, **features)
+    segment = int(calibration["final_segment"])
     segment_label = _segment_label(segment)
+    kmeans_segment_label = _segment_label(kmeans_segment)
     ranking_strategy = _ranking_strategy(segment)
     model_metadata = _load_model_metadata()
 
@@ -603,6 +607,10 @@ async def list_recommendations(
             "target_page": ad.target_page,
             "segment": segment,
             "segment_label": segment_label,
+            "kmeans_segment": kmeans_segment,
+            "kmeans_segment_label": kmeans_segment_label,
+            "calibration_applied": bool(calibration["calibration_applied"]),
+            "calibration_reason": calibration["calibration_reason"],
             "ranking_strategy": ranking_strategy,
             "features_used": features,
             "model_metadata": model_metadata,

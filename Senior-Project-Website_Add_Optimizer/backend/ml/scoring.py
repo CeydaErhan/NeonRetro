@@ -13,6 +13,8 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
+from ml.calibration import SEGMENT_STRATEGY_MAPPING
+
 MODEL_PATH = Path(__file__).resolve().parent / "model.pkl"
 MODEL_METADATA_PATH = Path(__file__).resolve().parent / "model_metadata.json"
 RANDOM_STATE = 42
@@ -49,11 +51,6 @@ FEATURE_NAMES = [
     "books_ratio",
     "sports_ratio",
 ]
-SEGMENT_STRATEGY_MAPPING = {
-    "low": "least_exposed_ads",
-    "medium": "impression_popularity",
-    "high": "ctr_performance",
-}
 SILHOUETTE_UNAVAILABLE = "not available for this model artifact"
 
 
