@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import joblib
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -27,6 +27,33 @@ from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, SEGMENT_LABELS, score_session
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
+DEFENSE_SCENARIOS = {
+    "casual": {
+        "label": "Casual Visitor",
+        "button_label": "Run Casual Visitor Scenario",
+        "visitor_id": "defense-demo-low",
+        "expected_segment_label": "Low",
+        "expected_strategy": "least_exposed_ads",
+        "behavior_summary": "Short browse with a single product touchpoint.",
+    },
+    "interested": {
+        "label": "Interested Visitor",
+        "button_label": "Run Interested Visitor Scenario",
+        "visitor_id": "defense-demo-medium",
+        "expected_segment_label": "Medium",
+        "expected_strategy": "impression_popularity",
+        "behavior_summary": "Category browsing with product view and attribute selection.",
+    },
+    "high-intent": {
+        "label": "High Intent Visitor",
+        "button_label": "Run High Intent Visitor Scenario",
+        "visitor_id": "defense-demo-high",
+        "expected_segment_label": "High",
+        "expected_strategy": "ctr_performance",
+        "behavior_summary": "Deep product comparison with repeated attribute choices and add-to-cart events.",
+    },
+}
+
 PRODUCTS_PATHS = []
 _rec_file = Path(__file__).resolve()
 for _idx in (2, 3, 4):
@@ -43,6 +70,108 @@ def _get_session_or_404(db: Session, session_id: int) -> VisitorSession:
     if visitor_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor session not found")
     return visitor_session
+
+
+def _model_status_payload() -> dict[str, object]:
+    """Return the model status fields used by defense demo screens."""
+    model_exists = MODEL_PATH.exists()
+    metadata = _load_model_metadata() if model_exists else None
+    return {
+        "model_exists": model_exists,
+        "model_status": "Real ML model loaded" if model_exists else "Fallback mode",
+        "model_warning": None if model_exists else "ML model is missing. Demo is in fallback mode.",
+        "model_metadata": metadata,
+    }
+
+
+def _latest_session_by_visitor_id(db: Session, visitor_id: str) -> VisitorSession | None:
+    """Return the newest deterministic defense session for a visitor id."""
+    return db.execute(
+        select(VisitorSession)
+        .where(VisitorSession.visitor_id == visitor_id)
+        .order_by(desc(VisitorSession.id))
+    ).scalar_one_or_none()
+
+
+def _ensure_defense_demo_records(db: Session) -> None:
+    """Create deterministic defense campaigns and scenario sessions when missing."""
+    missing_scenario = any(
+        _latest_session_by_visitor_id(db, scenario["visitor_id"]) is None
+        for scenario in DEFENSE_SCENARIOS.values()
+    )
+
+    from scripts.seed_defense_demo import create_campaigns_and_ads, seed_demo_sessions
+
+    create_campaigns_and_ads()
+    if missing_scenario:
+        seed_demo_sessions()
+
+
+def _scenario_payload(db: Session, scenario_key: str) -> dict[str, object]:
+    """Build a dashboard-friendly payload for one defense scenario."""
+    scenario = DEFENSE_SCENARIOS[scenario_key]
+    visitor_session = _latest_session_by_visitor_id(db, str(scenario["visitor_id"]))
+    if visitor_session is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Defense scenario was not seeded")
+
+    events = list(
+        db.execute(
+            select(Event)
+            .where(Event.session_id == visitor_session.id)
+            .order_by(Event.timestamp.asc(), Event.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    features = _derive_session_ml_features(visitor_session, events)
+    return {
+        "key": scenario_key,
+        "label": scenario["label"],
+        "button_label": scenario["button_label"],
+        "behavior_summary": scenario["behavior_summary"],
+        "expected_segment_label": scenario["expected_segment_label"],
+        "expected_strategy": scenario["expected_strategy"],
+        "session_id": visitor_session.id,
+        "visitor_id": visitor_session.visitor_id,
+        "event_count": len(events),
+        "features_used": features,
+        **_model_status_payload(),
+    }
+
+
+def _latest_live_tracking_payload(db: Session) -> dict[str, object] | None:
+    """Return the latest non-demo event so the dashboard can prove live tracking."""
+    latest_event = db.execute(
+        select(Event)
+        .join(VisitorSession, VisitorSession.id == Event.session_id)
+        .where(
+            or_(
+                VisitorSession.visitor_id.is_(None),
+                (
+                    ~VisitorSession.visitor_id.like("defense-demo%")
+                    & ~VisitorSession.visitor_id.like("ml-demo-%")
+                ),
+            )
+        )
+        .order_by(desc(Event.timestamp), desc(Event.id))
+        .limit(1)
+    ).scalars().first()
+
+    if latest_event is None:
+        return None
+
+    event_count = int(
+        db.scalar(select(func.count(Event.id)).where(Event.session_id == latest_event.session_id))
+        or 0
+    )
+    return {
+        "session_id": latest_event.session_id,
+        "event_count": event_count,
+        "latest_event_type": latest_event.type,
+        "latest_page": latest_event.page,
+        "latest_element": latest_event.element,
+        "latest_timestamp": latest_event.timestamp,
+    }
 
 
 def _load_product_events(db: Session, session_id: int) -> list[Event]:
@@ -481,6 +610,39 @@ async def list_recommendations(
         }
         for ad in recommended_ads
     ]
+
+
+@router.get("/defense-demo/status")
+async def defense_demo_status(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return model, scenario, and live tracking status for the defense dashboard."""
+    scenario_sessions = {
+        key: _scenario_payload(db, key)
+        for key, scenario in DEFENSE_SCENARIOS.items()
+        if _latest_session_by_visitor_id(db, str(scenario["visitor_id"])) is not None
+    }
+    return {
+        **_model_status_payload(),
+        "scenarios": scenario_sessions,
+        "live_tracking": _latest_live_tracking_payload(db),
+        "strategy_note": "/ads/placement uses least_exposed_ads for low engagement; /recommendations labels low as newest_ads.",
+    }
+
+
+@router.post("/defense-demo/scenarios/{scenario_key}")
+async def run_defense_demo_scenario(
+    scenario_key: str,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Create or reuse a deterministic defense session and return its feature payload."""
+    if scenario_key not in DEFENSE_SCENARIOS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown defense scenario")
+
+    _ensure_defense_demo_records(db)
+    return _scenario_payload(db, scenario_key)
 
 
 @router.get("/recently-viewed", response_model=list[SessionProductInteractionRead])

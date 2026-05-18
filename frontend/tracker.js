@@ -13,7 +13,28 @@ function resolveBaseUrl() {
 
 const BASE_URL = resolveBaseUrl();
 const SESSION_KEY = 'neonretro_tracking_session_id';
+const TRACKING_DEBUG_KEY = 'NEON_TRACKING_DEBUG';
 let sessionIdPromise = null;
+
+function isTrackingDebugEnabled() {
+  return Boolean(
+    window.NEON_TRACKING_DEBUG ||
+    new URLSearchParams(window.location.search).has('tracking_debug') ||
+    window.localStorage.getItem(TRACKING_DEBUG_KEY) === '1'
+  );
+}
+
+function reportTrackingFailure(error, context) {
+  window.__NEON_TRACKING_LAST_ERROR__ = {
+    context,
+    message: error?.message || String(error),
+    at: new Date().toISOString()
+  };
+
+  if (isTrackingDebugEnabled()) {
+    console.warn('NeonRetro tracking failed', window.__NEON_TRACKING_LAST_ERROR__);
+  }
+}
 
 function getStoredSessionId() {
   const stored = window.localStorage.getItem(SESSION_KEY);
@@ -56,7 +77,10 @@ async function getSessionId() {
 
   if (!sessionIdPromise) {
     sessionIdPromise = createVisitorSession()
-      .catch(() => null)
+      .catch((error) => {
+        reportTrackingFailure(error, 'createVisitorSession');
+        return null;
+      })
       .finally(() => {
         sessionIdPromise = null;
       });
@@ -95,7 +119,9 @@ async function sendEvent(payload) {
       ...payload,
       session_id: sessionId
     })
-  }).catch(() => {});
+  }).catch((error) => {
+    reportTrackingFailure(error, 'sendEvent');
+  });
 }
 
 async function trackPageview(metadata = {}) {

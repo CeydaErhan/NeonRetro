@@ -28,6 +28,7 @@ services:
       SECRET_KEY: change-this-secret-key-in-production
       ALGORITHM: HS256
     volumes:
+      - ./backend/ml:/app/ml
       - ../frontend/data:/seed-data:ro
     ports:
       - "10000:10000"
