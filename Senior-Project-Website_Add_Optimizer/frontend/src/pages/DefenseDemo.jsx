@@ -226,6 +226,7 @@ export default function DefenseDemo() {
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
               Deterministic visitor scenarios pass through the same KMeans session segmentation and storefront ad placement endpoint used by NeonRetro.
               Explicit purchase signals can calibrate a medium behavioral cluster into high commercial intent when cart and attribute-selection actions are strong.
+              Ad performance feedback updates ranking metrics, not the KMeans model.
             </p>
           </div>
           <div className={`rounded-lg px-4 py-3 text-sm font-bold ${modelLoaded ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>

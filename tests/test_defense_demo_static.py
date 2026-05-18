@@ -58,6 +58,7 @@ class DefenseDemoStaticTests(unittest.TestCase):
         self.assertIn("Business action: segment-aware ad ranking strategy", page)
         self.assertIn("Why this segment?", page)
         self.assertIn("Explicit purchase signals can calibrate a medium behavioral cluster into high commercial intent", page)
+        self.assertIn("Ad performance feedback updates ranking metrics, not the KMeans model.", page)
         self.assertIn("Calibration Applied", page)
         self.assertIn("KMeans Cluster Segment", page)
         self.assertIn("low activity", page)
