@@ -7,7 +7,6 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-import joblib
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -23,7 +22,7 @@ from app.schemas import (
 )
 from ml.product_ranker import PRODUCT_RANKER_PATH, rank_products_with_model
 from ml.recommendation import get_recommendations as get_segment_recommendations
-from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, SEGMENT_LABELS, score_session
+from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, SEGMENT_LABELS, load_model_metadata, score_session
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
 
@@ -263,28 +262,28 @@ def _ranking_strategy(segment: int) -> str:
 
 def _load_model_metadata() -> dict[str, object] | None:
     """Read safe metadata from the persisted KMeans artifact when available."""
-    if not MODEL_PATH.exists():
-        return None
-    try:
-        payload = joblib.load(MODEL_PATH)
-    except Exception:
-        return None
-
-    metadata = payload.get("metadata")
+    metadata = load_model_metadata()
     if not isinstance(metadata, dict):
         return None
 
     safe_keys = {
+        "algorithm",
         "model_type",
         "model_version",
         "trained_at",
         "training_source",
         "training_session_count",
+        "training_session_count_note",
+        "feature_count",
         "feature_names",
         "random_state",
         "n_clusters",
+        "scaler",
         "scaler_type",
+        "silhouette_score",
+        "silhouette_score_note",
         "segment_labels",
+        "segment_strategy_mapping",
     }
     return {key: value for key, value in metadata.items() if key in safe_keys}
 

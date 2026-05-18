@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import unittest
 
 
@@ -50,8 +51,38 @@ class DefenseDemoStaticTests(unittest.TestCase):
         self.assertIn("beauty_ratio", page)
         self.assertIn("books_ratio", page)
         self.assertIn("sports_ratio", page)
+        self.assertIn("ML Algorithm: KMeans Clustering", page)
+        self.assertIn("Input: 15 visitor behavior features", page)
+        self.assertIn("Preprocessing: StandardScaler", page)
+        self.assertIn("Output: low / medium / high engagement segment", page)
+        self.assertIn("Business action: segment-aware ad ranking strategy", page)
+        self.assertIn("Why this segment?", page)
+        self.assertIn("low activity", page)
+        self.assertIn("moderate browsing", page)
+        self.assertIn("stronger click/product signals", page)
+        self.assertIn("Marketing Meaning", page)
         self.assertIn("/defense-demo", app)
         self.assertIn("Defense Demo", sidebar)
+
+    def test_ml_metadata_artifact_documents_defense_model(self):
+        metadata_path = ROOT / "Senior-Project-Website_Add_Optimizer" / "backend" / "ml" / "model_metadata.json"
+        self.assertTrue(metadata_path.exists())
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(metadata["algorithm"], "KMeans")
+        self.assertEqual(metadata["n_clusters"], 3)
+        self.assertEqual(metadata["scaler"], "StandardScaler")
+        self.assertEqual(metadata["feature_count"], 15)
+        self.assertEqual(len(metadata["feature_names"]), 15)
+        self.assertEqual(
+            metadata["segment_strategy_mapping"],
+            {
+                "low": "least_exposed_ads",
+                "medium": "impression_popularity",
+                "high": "ctr_performance",
+            },
+        )
+        self.assertIn("silhouette_score", metadata)
 
     def test_existing_dashboard_manual_demo_shows_missing_model_warning_and_all_features(self):
         dashboard = read("Senior-Project-Website_Add_Optimizer/frontend/src/pages/Dashboard.jsx")

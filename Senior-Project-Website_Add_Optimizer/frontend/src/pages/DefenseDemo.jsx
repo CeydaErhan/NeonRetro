@@ -24,6 +24,18 @@ const scenarioButtons = [
 
 const pipelineSteps = ["Visitor Behavior", "Feature Extraction", "KMeans Model", "Segment", "Ad Decision"];
 
+const scenarioExplanations = {
+  casual: ["low activity", "few clicks/pages", "weak purchase intent"],
+  interested: ["moderate browsing", "some product/category interest", "medium engagement"],
+  "high-intent": ["stronger click/product signals", "add-to-cart or attribute-selection behavior", "higher commercial intent"]
+};
+
+const segmentExplanationRows = [
+  ["Low", "Light browsing with limited interaction depth", "least_exposed_ads", "Introduce under-exposed campaigns without over-optimizing for intent"],
+  ["Medium", "Category and product interest with moderate engagement", "impression_popularity", "Show proven ads to visitors who are actively comparing options"],
+  ["High", "Repeated product signals, attribute choices, or cart behavior", "ctr_performance", "Prioritize ads with stronger click-through performance for commercial intent"]
+];
+
 const featureRows = [
   ["page_count", "Page Count"],
   ["click_count", "Click Count"],
@@ -58,6 +70,13 @@ function formatValue(value) {
     return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(3);
   }
   return String(value);
+}
+
+function formatMetadataValue(value, fallback = "not available for this model artifact") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  return formatValue(value);
 }
 
 function titleCase(value) {
@@ -143,6 +162,8 @@ export default function DefenseDemo() {
   const modelLoaded = status ? Boolean(status.model_exists) : isRealMlPlacement(placement);
   const modelStatusLabel = status ? (modelLoaded ? "Real ML model loaded" : "Fallback mode") : "Checking model...";
   const shouldShowFallbackWarning = (status && !status.model_exists) || (placement && !isRealMlPlacement(placement));
+  const modelMetadata = status?.model_metadata || selectedScenario?.model_metadata || {};
+  const activeScenarioKey = selectedScenario?.key || "casual";
 
   const selectedFeatureRows = useMemo(() => {
     const features = placement?.features_used || selectedScenario?.features_used || {};
@@ -224,6 +245,27 @@ export default function DefenseDemo() {
         <div className="mt-6">
           <Pipeline active={Boolean(placement)} />
         </div>
+
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {[
+            ["ML Algorithm: KMeans Clustering", modelMetadata.algorithm ? `${modelMetadata.algorithm} Clustering` : "KMeans Clustering"],
+            ["Input: 15 visitor behavior features", `${modelMetadata.feature_count || 15} features`],
+            ["Preprocessing: StandardScaler", modelMetadata.scaler || modelMetadata.scaler_type || "StandardScaler"],
+            ["Output: low / medium / high engagement segment", "low / medium / high"],
+            ["Business action: segment-aware ad ranking strategy", "Segment-aware ad ranking strategy"],
+            ["Model status: Real ML model loaded", modelStatusLabel],
+            ["Training sessions", formatMetadataValue(modelMetadata.training_session_count)],
+            [
+              "Silhouette score",
+              formatMetadataValue(modelMetadata.silhouette_score, modelMetadata.silhouette_score_note || "not available for this model artifact")
+            ]
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+              <p className="mt-2 text-sm font-bold text-slate-900">{value}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -270,6 +312,17 @@ export default function DefenseDemo() {
               </div>
             ))}
           </dl>
+
+          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-bold text-slate-900">Why this segment?</h3>
+            <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-700 sm:grid-cols-3">
+              {(scenarioExplanations[activeScenarioKey] || scenarioExplanations.casual).map((reason) => (
+                <li key={reason} className="rounded-md bg-white px-3 py-2 font-medium">
+                  {reason}
+                </li>
+              ))}
+            </ul>
+          </div>
 
           <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -319,6 +372,38 @@ export default function DefenseDemo() {
           </details>
         </article>
       </div>
+
+      <article className="rounded-xl bg-white p-5 shadow-card">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Cluster to Segment Explanation</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            KMeans assigns a cluster from the 15 scaled behavior features, then the backend maps that cluster to a stable business segment.
+          </p>
+        </div>
+        <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                {["Segment", "Behavior Pattern", "Ad Strategy", "Marketing Meaning"].map((heading) => (
+                  <th key={heading} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {segmentExplanationRows.map(([segment, behaviorPattern, adStrategy, marketingMeaning]) => (
+                <tr key={segment}>
+                  <td className="px-4 py-3 font-bold text-slate-900">{segment}</td>
+                  <td className="px-4 py-3 text-slate-700">{behaviorPattern}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">{adStrategy}</td>
+                  <td className="px-4 py-3 text-slate-700">{marketingMeaning}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
 
       <LiveTrackingPanel liveTracking={status?.live_tracking} onRefresh={loadStatus} />
     </section>
