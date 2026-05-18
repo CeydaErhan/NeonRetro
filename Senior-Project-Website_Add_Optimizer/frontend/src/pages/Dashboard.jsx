@@ -30,10 +30,14 @@ const placementFeatureRows = [
   ["add_to_cart_count", "Add To Cart Count"],
   ["attribute_selection_count", "Attribute Selection Count"],
   ["avg_price", "Avg Price"],
+  ["price_stddev", "Price Stddev"],
   ["category_diversity", "Category Diversity"],
   ["electronics_ratio", "Electronics Ratio"],
   ["clothing_ratio", "Clothing Ratio"],
-  ["home_appliances_ratio", "Home Appliances Ratio"]
+  ["beauty_ratio", "Beauty Ratio"],
+  ["home_appliances_ratio", "Home Appliances Ratio"],
+  ["books_ratio", "Books Ratio"],
+  ["sports_ratio", "Sports Ratio"]
 ];
 
 function buildAuthorizationHeader(token) {
@@ -207,6 +211,9 @@ export default function Dashboard() {
     { label: "Total Impressions", value: summary.impressions.toLocaleString(), change: "Live data" },
     { label: "Avg CTR", value: `${(summary.ctr * 100).toFixed(2)}%`, change: `${summary.clicks.toLocaleString()} clicks` }
   ];
+  const isFallbackPlacement =
+    demoPlacement &&
+    (demoPlacement.explanation?.startsWith("fallback:") || demoPlacement.fallback_reason || !demoPlacement.segment_label);
 
   return (
     <section className="space-y-6">
@@ -316,6 +323,12 @@ export default function Dashboard() {
 
         {demoPlacement ? (
           <div className="mt-5 space-y-5">
+            {isFallbackPlacement ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                ML model is missing. Demo is in fallback mode.
+              </p>
+            ) : null}
+
             <div className="rounded-xl border border-slate-200 p-4">
               <h3 className="text-base font-semibold text-slate-900">Why this ad was selected?</h3>
               <div className="mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,380px)]">

@@ -101,7 +101,9 @@ export default function Ads() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Ads</h2>
-          <p className="text-sm text-slate-500">Manage ad units used by placement and campaign workflows.</p>
+          <p className="text-sm text-slate-500">
+            Manage marketing ad units used by placement workflows. These are not storefront product inventory.
+          </p>
         </div>
 
         <button

@@ -152,9 +152,6 @@ def load_training_rows(limit: int | None, days: int | None) -> tuple[np.ndarray,
             stmt = stmt.where(VisitorSession.started_at >= cutoff)
 
         stmt = stmt.order_by(VisitorSession.started_at.desc())
-        if limit is not None:
-            stmt = stmt.limit(limit)
-
         sessions = list(db.execute(stmt).scalars().all())
 
     rows: list[list[float]] = []
@@ -163,6 +160,8 @@ def load_training_rows(limit: int | None, days: int | None) -> tuple[np.ndarray,
         if features is None:
             continue
         rows.append(features.to_row())
+        if limit is not None and len(rows) >= limit:
+            break
 
     if not rows:
         return np.empty((0, len(FEATURE_NAMES))), 0

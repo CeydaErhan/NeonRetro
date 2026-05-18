@@ -1,6 +1,22 @@
 import { useEffect, useState } from "react";
 import api from "../api/axios";
 
+const TOKEN_KEY = "optimizer_jwt_token";
+
+function buildAuthorizationHeader(token) {
+  if (!token) {
+    return null;
+  }
+
+  return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+}
+
+function getAuthHeaders() {
+  const token = window.localStorage.getItem(TOKEN_KEY);
+  const authorization = buildAuthorizationHeader(token);
+  return authorization ? { Authorization: authorization } : {};
+}
+
 function formatTimestamp(value) {
   if (!value) {
     return "-";
@@ -22,6 +38,7 @@ export default function Analytics() {
 
       try {
         const response = await api.get("/events/list", {
+          headers: getAuthHeaders(),
           params: {
             limit: 20
           }

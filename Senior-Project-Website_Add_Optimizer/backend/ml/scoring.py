@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -9,9 +10,13 @@ from typing import Any
 import joblib
 import numpy as np
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
+from ml.calibration import SEGMENT_STRATEGY_MAPPING
+
 MODEL_PATH = Path(__file__).resolve().parent / "model.pkl"
+MODEL_METADATA_PATH = Path(__file__).resolve().parent / "model_metadata.json"
 RANDOM_STATE = 42
 N_CLUSTERS = 3
 MODEL_TYPE = "kmeans_session_segmentation"
@@ -46,6 +51,7 @@ FEATURE_NAMES = [
     "books_ratio",
     "sports_ratio",
 ]
+SILHOUETTE_UNAVAILABLE = "not available for this model artifact"
 
 
 def _generate_synthetic_sessions(sample_count: int = 500) -> np.ndarray:
@@ -164,20 +170,59 @@ def _build_metadata(
     *,
     training_source: str,
     training_session_count: int,
+    silhouette_score_value: float | None = None,
+    silhouette_score_note: str | None = None,
 ) -> dict[str, Any]:
     """Build metadata stored next to the persisted model artifact."""
     return {
+        "algorithm": "KMeans",
         "model_type": MODEL_TYPE,
         "model_version": MODEL_VERSION,
         "trained_at": datetime.now(UTC).isoformat(),
         "training_source": training_source,
         "training_session_count": int(training_session_count),
+        "feature_count": len(FEATURE_NAMES),
         "feature_names": FEATURE_NAMES,
         "random_state": RANDOM_STATE,
         "n_clusters": N_CLUSTERS,
+        "scaler": "StandardScaler",
         "scaler_type": "StandardScaler",
+        "silhouette_score": silhouette_score_value,
+        "silhouette_score_note": silhouette_score_note,
         "segment_labels": SEGMENT_LABELS,
+        "segment_strategy_mapping": SEGMENT_STRATEGY_MAPPING,
     }
+
+
+def _compute_silhouette_score(scaled_features: np.ndarray, labels: np.ndarray) -> tuple[float | None, str | None]:
+    """Compute a cluster quality score when the fitted labels support it."""
+    try:
+        unique_labels = set(int(label) for label in labels)
+        if len(unique_labels) < 2 or scaled_features.shape[0] <= len(unique_labels):
+            return None, SILHOUETTE_UNAVAILABLE
+        return round(float(silhouette_score(scaled_features, labels)), 4), None
+    except Exception:
+        return None, SILHOUETTE_UNAVAILABLE
+
+
+def _write_metadata_artifact(metadata: dict[str, Any]) -> None:
+    """Persist a human-readable metadata artifact without blocking model training."""
+    try:
+        MODEL_METADATA_PATH.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except Exception:
+        return
+
+
+def load_model_metadata() -> dict[str, Any] | None:
+    """Load the human-readable model metadata artifact when available."""
+    if MODEL_METADATA_PATH.exists():
+        try:
+            metadata = json.loads(MODEL_METADATA_PATH.read_text(encoding="utf-8"))
+            if isinstance(metadata, dict):
+                return metadata
+        except Exception:
+            return None
+    return None
 
 
 def _fit_model(
@@ -192,6 +237,7 @@ def _fit_model(
 
     model = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE, n_init=10)
     model.fit(scaled_features)
+    silhouette_score_value, silhouette_score_note = _compute_silhouette_score(scaled_features, model.labels_)
 
     raw_centers = scaler.inverse_transform(model.cluster_centers_)
     ranked_clusters = sorted(
@@ -200,18 +246,22 @@ def _fit_model(
     )
     cluster_to_segment = {cluster_index: segment for segment, cluster_index in enumerate(ranked_clusters)}
 
+    metadata = _build_metadata(
+        training_source=training_source,
+        training_session_count=training_session_count or int(feature_matrix.shape[0]),
+        silhouette_score_value=silhouette_score_value,
+        silhouette_score_note=silhouette_score_note,
+    )
     payload = {
         "model": model,
         "scaler": scaler,
         "feature_names": FEATURE_NAMES,
         "cluster_to_segment": cluster_to_segment,
-        "metadata": _build_metadata(
-            training_source=training_source,
-            training_session_count=training_session_count or int(feature_matrix.shape[0]),
-        ),
+        "metadata": metadata,
     }
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(payload, MODEL_PATH)
+    _write_metadata_artifact(metadata)
     return payload
 
 

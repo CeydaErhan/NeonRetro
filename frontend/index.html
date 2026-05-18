@@ -191,16 +191,26 @@
 
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Filter -->
-    <div class="flex flex-wrap justify-end gap-3 mb-8">
+    <div class="mb-8 flex flex-wrap items-center justify-between gap-3 border border-[#00FF88]/40 bg-[#00FF88]/5 p-3">
+      <div>
+        <p id="active-filter-label" class="text-xs font-black text-[#00FF88]">Showing all products</p>
+        <p class="mt-1 text-[10px] font-mono text-[#00D4FF]">Regular catalog controls. ML affects the live campaign placement below.</p>
+      </div>
+      <div class="flex flex-wrap justify-end gap-3">
+      <button id="reset-catalog-btn" type="button" class="retro-btn-neon px-3 py-1 text-xs">ALL PRODUCTS</button>
       <select id="category-filter" class="filter-select"><option value="all">🌀 ALL CATEGORIES</option></select>
-      <select id="sort-select" class="filter-select"><option value="default">⚡ SORT</option><option value="price_asc">💰 PRICE: LOW</option><option value="price_desc">💸 PRICE: HIGH</option><option value="popular">🔥 BEST SELLING</option></select>
+      <select id="sort-select" class="filter-select"><option value="default">⚡ DEFAULT ORDER</option><option value="price_asc">💰 PRICE: LOW</option><option value="price_desc">💸 PRICE: HIGH</option><option value="popular">🔥 BEST SELLING</option></select>
       <div class="text-xs font-black px-3 py-1 border border-[#00FF88] text-[#00FF88]"><span id="product-count">0</span> products</div>
+      </div>
     </div>
 
     <!-- Featured Slider -->
     <section class="mb-12">
       <div class="flex justify-between items-center mb-4">
-        <h2 class="text-xl font-black neon-text-blue tracking-wider">✨ FEATURED</h2>
+        <div>
+          <h2 class="text-xl font-black neon-text-blue tracking-wider">✨ FEATURED</h2>
+          <p class="text-[11px] text-[#00FF88] font-mono mt-1">Stable catalog picks based on rating and sales. Not KMeans output.</p>
+        </div>
         <div class="flex gap-2">
           <button onclick="scrollSlider('recommended', -280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">←</button>
           <button onclick="scrollSlider('recommended', 280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">→</button>
@@ -233,19 +243,20 @@
       <div id="recentlyViewedLoading" class="text-center text-sm text-[#00FF88] mt-4 hidden">LOADING SESSION HISTORY...</div>
     </section>
 
-    <section id="suggested-products-section" class="mb-12 hidden">
+    <section id="recommended-products-section" class="mb-12">
       <div class="flex justify-between items-center mb-4">
         <div>
-          <h2 class="text-xl font-black neon-text-blue tracking-wider">🤖 SUGGESTED FOR YOU</h2>
-          <p class="text-[11px] text-[#FF2D75] font-mono mt-1">ML-ranked products matched to this session's category, price, and attribute preferences.</p>
+          <h2 class="text-xl font-black neon-text-blue tracking-wider">🤖 Recommended for You</h2>
+          <p class="text-[11px] text-[#FF2D75] font-mono mt-1">Based on your browsing behavior and session signals.</p>
+          <p id="recommended-products-meta" class="text-[10px] text-[#00D4FF] font-mono mt-1">Loading session recommendations...</p>
         </div>
         <div class="flex gap-2">
-          <button onclick="scrollSlider('suggested-products', -280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">←</button>
-          <button onclick="scrollSlider('suggested-products', 280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">→</button>
+          <button onclick="scrollSlider('recommended-products', -280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">←</button>
+          <button onclick="scrollSlider('recommended-products', 280)" class="w-8 h-8 retro-btn-neon text-[#00FF88]">→</button>
         </div>
       </div>
-      <div id="suggested-products-slider" class="slider-container"><div id="suggested-products-track" class="slider-track"></div></div>
-      <div id="suggestedProductsLoading" class="text-center text-sm text-[#00FF88] mt-4 hidden">RANKING PRODUCTS WITH ML...</div>
+      <div id="recommended-products-slider" class="slider-container"><div id="recommended-products-track" class="slider-track"></div></div>
+      <div id="recommendedProductsLoading" class="text-center text-sm text-[#00FF88] mt-4 hidden">RANKING PRODUCTS FROM SESSION SIGNALS...</div>
     </section>
 
     <!-- All Products -->
@@ -257,7 +268,7 @@
     </section>
   </main>
 
-  <script src="tracker.js"></script>
+  <script src="tracker.js?v=defense-session-recovery"></script>
   <script>
     // ========== DATA ==========
     const allProducts = [];
@@ -277,8 +288,9 @@
     let currentSort = 'default';
     let totalProducts = 0;
     let recentlyViewedProducts = [];
-    let suggestedProducts = [];
+    let recommendedProducts = [];
     let activeCampaignPlacement = null;
+    let recommendedProductsReloadTimer = null;
 
     function getStoreApiBaseUrl() {
       if (window.NEON_API_BASE_URL) return window.NEON_API_BASE_URL.replace(/\/$/, '');
@@ -321,7 +333,7 @@
 
     function trackCatalogInteraction(element, product, extraMetadata = {}) {
       if (!window.tracker?.track || !product) return;
-      tracker.track('click', element, {
+      return tracker.track('click', element, {
         metadata: {
           ...buildProductTrackingMetadata(product),
           ...extraMetadata
@@ -384,11 +396,16 @@
       if (existing) existing.quantity++;
       else cart.push({ id: productId, name: productName, price: product.price, image: product.image, quantity: 1 });
       saveCart(cart);
-      trackCatalogInteraction('add-to-cart', product, {
+      const trackingRequest = trackCatalogInteraction('add-to-cart', product, {
         source: 'home',
         quantity: 1,
         cart_size_after_add: cart.reduce((sum, item) => sum + item.quantity, 0)
       });
+      if (trackingRequest?.finally) {
+        trackingRequest.finally(() => queueRecommendedProductsReload(200));
+      } else {
+        queueRecommendedProductsReload();
+      }
       showToast(`🛒 ${productName} added to cart`);
     }
 
@@ -459,6 +476,42 @@
       const products = await response.json();
       allProducts.splice(0, allProducts.length, ...products);
     }
+
+    function getEffectivePrice(product) {
+      return product.discount ? product.price * (1 - product.discount / 100) : product.price;
+    }
+
+    function compareBestSellers(a, b) {
+      const salesDiff = (b.salesCount || 0) - (a.salesCount || 0);
+      if (salesDiff !== 0) return salesDiff;
+      const ratingDiff = (b.rating || 0) - (a.rating || 0);
+      if (ratingDiff !== 0) return ratingDiff;
+      return a.name.localeCompare(b.name);
+    }
+
+    function compareDefaultCatalog(a, b) {
+      return Number(a.id || 0) - Number(b.id || 0);
+    }
+
+    function getCategoryName(slug) {
+      const category = categories.find(c => c.slug === slug);
+      return category ? category.name : 'All Categories';
+    }
+
+    function updateCatalogStateSummary() {
+      const label = document.getElementById('active-filter-label');
+      if (!label) return;
+      const categoryLabel = currentCategory === 'all' ? 'all products' : getCategoryName(currentCategory);
+      const sortLabel = currentSort === 'popular'
+        ? 'best sellers first'
+        : currentSort === 'price_asc'
+          ? 'lowest price first'
+          : currentSort === 'price_desc'
+            ? 'highest price first'
+            : 'default catalog order';
+      label.innerText = `Showing ${categoryLabel} - ${sortLabel}`;
+    }
+
     function getFilteredProducts() {
       let products = [...allProducts];
       if (currentCategory !== 'all') {
@@ -466,32 +519,43 @@
       }
       if (currentSort === 'price_asc') {
         products.sort((a, b) => {
-          const priceA = a.discount ? a.price * (1 - a.discount / 100) : a.price;
-          const priceB = b.discount ? b.price * (1 - b.discount / 100) : b.price;
-          return priceA - priceB;
+          const priceDiff = getEffectivePrice(a) - getEffectivePrice(b);
+          return priceDiff || a.name.localeCompare(b.name);
         });
       } else if (currentSort === 'price_desc') {
         products.sort((a, b) => {
-          const priceA = a.discount ? a.price * (1 - a.discount / 100) : a.price;
-          const priceB = b.discount ? b.price * (1 - b.discount / 100) : b.price;
-          return priceB - priceA;
+          const priceDiff = getEffectivePrice(b) - getEffectivePrice(a);
+          return priceDiff || a.name.localeCompare(b.name);
         });
       } else if (currentSort === 'popular') {
-        products.sort((a, b) => b.salesCount - a.salesCount);
+        products.sort(compareBestSellers);
+      } else {
+        products.sort(compareDefaultCatalog);
       }
       return products;
+    }
+
+    function getFeaturedProducts() {
+      // Stable curated rule: featured flag first, then rating and sales fallback.
+      return [...allProducts]
+        .sort((a, b) => {
+          const featuredDiff = Number(Boolean(b.featured)) - Number(Boolean(a.featured));
+          if (featuredDiff !== 0) return featuredDiff;
+          const ratingDiff = (b.rating || 0) - (a.rating || 0);
+          if (ratingDiff !== 0) return ratingDiff;
+          return compareBestSellers(a, b);
+        })
+        .slice(0, 20);
     }
 
     function loadRecommendations() {
       const recTrack = document.getElementById('recommended-track');
       const recLoading = document.getElementById('recLoading');
       recLoading.classList.remove('hidden');
-      
-      // Randomly select 20 products
-      const shuffled = [...allProducts].sort(() => 0.5 - Math.random());
-      const recommended = shuffled.slice(0, 20);
-      
-      recTrack.innerHTML = recommended.map(p => renderProductCard(p)).join('');
+
+      const featured = getFeaturedProducts();
+
+      recTrack.innerHTML = featured.map(p => renderProductCard(p)).join('');
       recLoading.classList.add('hidden');
       updateAllFavoriteButtons();
     }
@@ -548,15 +612,26 @@
       if (!section || !window.tracker?.getSessionId) return;
 
       try {
-        const sessionId = await window.tracker.getSessionId();
-        const query = sessionId ? `?page=home&session_id=${sessionId}` : '?page=home';
-        const response = await fetch(`${getStoreApiBaseUrl()}/ads/placement${query}`);
+        let sessionId = await window.tracker.getSessionId();
+        let query = sessionId ? `?page=home&session_id=${sessionId}` : '?page=home';
+        let response = await fetch(`${getStoreApiBaseUrl()}/ads/placement${query}`);
         if (!response.ok) {
           section.classList.add('hidden');
           return;
         }
 
-        const placement = await response.json();
+        let placement = await response.json();
+        if (placement?.fallback_reason === 'session_not_found' && window.tracker?.refreshSessionId) {
+          sessionId = await window.tracker.refreshSessionId('stale_placement_session');
+          query = sessionId ? `?page=home&session_id=${sessionId}` : '?page=home';
+          response = await fetch(`${getStoreApiBaseUrl()}/ads/placement${query}`);
+          if (!response.ok) {
+            section.classList.add('hidden');
+            return;
+          }
+          placement = await response.json();
+        }
+
         if (!placement) {
           section.classList.add('hidden');
           return;
@@ -628,10 +703,23 @@
       }
     }
 
-    async function loadSuggestedProducts() {
-      const section = document.getElementById('suggested-products-section');
-      const track = document.getElementById('suggested-products-track');
-      const loading = document.getElementById('suggestedProductsLoading');
+    function summarizeRecommendationSignals(items) {
+      const signals = items.flatMap(item => item.matched_signals || []);
+      const categorySignal = signals.find(signal => signal.startsWith('category:'));
+      if (categorySignal) {
+        return `Session signal: ${getCategoryName(categorySignal.replace('category:', ''))}`;
+      }
+      if (signals.includes('popular:fallback')) {
+        return 'Fresh session fallback: stable popular products';
+      }
+      return 'Ranked from current session behavior';
+    }
+
+    async function loadRecommendedProducts() {
+      const section = document.getElementById('recommended-products-section');
+      const track = document.getElementById('recommended-products-track');
+      const loading = document.getElementById('recommendedProductsLoading');
+      const meta = document.getElementById('recommended-products-meta');
       if (!section || !track || !loading || !window.tracker?.getSessionId) return;
 
       loading.classList.remove('hidden');
@@ -671,13 +759,14 @@
           }
         });
 
-        suggestedProducts = uniqueProducts;
-        if (!suggestedProducts.length) {
+        recommendedProducts = uniqueProducts;
+        if (!recommendedProducts.length) {
           section.classList.add('hidden');
           return;
         }
 
-        track.innerHTML = suggestedProducts.map(product => renderProductCard(product)).join('');
+        if (meta) meta.innerText = summarizeRecommendationSignals(items);
+        track.innerHTML = recommendedProducts.map(product => renderProductCard(product)).join('');
         section.classList.remove('hidden');
         updateAllFavoriteButtons();
       } catch (_) {
@@ -685,6 +774,13 @@
       } finally {
         loading.classList.add('hidden');
       }
+    }
+
+    function queueRecommendedProductsReload(delay = 500) {
+      if (recommendedProductsReloadTimer) clearTimeout(recommendedProductsReloadTimer);
+      recommendedProductsReloadTimer = setTimeout(() => {
+        loadRecommendedProducts();
+      }, delay);
     }
 
     function loadProducts() {
@@ -698,12 +794,15 @@
       const filtered = getFilteredProducts();
       totalProducts = filtered.length;
       document.getElementById('product-count').innerText = totalProducts;
+      updateCatalogStateSummary();
       
       const limit = 10;
       const start = (currentPage - 1) * limit;
       const paginated = filtered.slice(start, start + limit);
       
-      container.innerHTML = paginated.map(p => renderProductListItem(p)).join('');
+      container.innerHTML = paginated.length
+        ? paginated.map(p => renderProductListItem(p)).join('')
+        : '<div class="border border-dashed border-[#FF2D75] p-8 text-center text-[#00FF88] font-mono">No products match this catalog filter. Use All Products to reset.</div>';
       container.classList.remove('hidden');
       loading.classList.add('hidden');
       
@@ -728,6 +827,25 @@
     function refreshProducts() {
       currentPage = 1;
       loadProducts();
+    }
+
+    function trackCategoryInterest(category) {
+      if (!window.tracker?.track || category === 'all') return null;
+      return tracker.track('click', 'category_filter', {
+        metadata: {
+          category,
+          category_name: getCategoryName(category),
+          source: 'home_catalog_filter'
+        }
+      });
+    }
+
+    function resetCatalogControls() {
+      currentCategory = 'all';
+      currentSort = 'default';
+      document.getElementById('category-filter').value = currentCategory;
+      document.getElementById('sort-select').value = currentSort;
+      refreshProducts();
     }
 
     function goToPage(page) {
@@ -757,6 +875,9 @@
           currentCategory = link.dataset.cat;
           document.getElementById('category-filter').value = currentCategory;
           refreshProducts();
+          const trackingRequest = trackCategoryInterest(currentCategory);
+          if (trackingRequest?.finally) trackingRequest.finally(() => queueRecommendedProductsReload(200));
+          else queueRecommendedProductsReload();
         });
       });
     }
@@ -799,15 +920,19 @@
       loadRecommendations();
       await loadCampaignPlacement();
       await loadRecentlyViewed();
-      await loadSuggestedProducts();
+      await loadRecommendedProducts();
       loadProducts();
       saveCart(getCart());
       updateFavoritesBadge();
       
       // Filter events
+      document.getElementById('reset-catalog-btn')?.addEventListener('click', resetCatalogControls);
       document.getElementById('category-filter').addEventListener('change', (e) => {
         currentCategory = e.target.value;
         refreshProducts();
+        const trackingRequest = trackCategoryInterest(currentCategory);
+        if (trackingRequest?.finally) trackingRequest.finally(() => queueRecommendedProductsReload(200));
+        else queueRecommendedProductsReload();
       });
       document.getElementById('sort-select').addEventListener('change', (e) => {
         currentSort = e.target.value;

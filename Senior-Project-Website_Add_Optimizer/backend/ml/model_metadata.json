@@ -1,0 +1,42 @@
+{
+  "algorithm": "KMeans",
+  "feature_count": 15,
+  "feature_names": [
+    "page_count",
+    "click_count",
+    "dwell_time_seconds",
+    "unique_products",
+    "add_to_cart_count",
+    "attribute_selection_count",
+    "avg_price",
+    "price_stddev",
+    "category_diversity",
+    "electronics_ratio",
+    "clothing_ratio",
+    "beauty_ratio",
+    "home_appliances_ratio",
+    "books_ratio",
+    "sports_ratio"
+  ],
+  "model_type": "kmeans_session_segmentation",
+  "model_version": "kmeans-session-v1",
+  "n_clusters": 3,
+  "random_state": 42,
+  "scaler": "StandardScaler",
+  "scaler_type": "StandardScaler",
+  "segment_labels": {
+    "0": "low",
+    "1": "medium",
+    "2": "high"
+  },
+  "segment_strategy_mapping": {
+    "high": "ctr_performance",
+    "low": "least_exposed_ads",
+    "medium": "impression_popularity"
+  },
+  "silhouette_score": 0.3386,
+  "silhouette_score_note": null,
+  "trained_at": "2026-05-18T14:53:12.349143+00:00",
+  "training_session_count": 63,
+  "training_source": "real_db_sessions"
+}

@@ -6,6 +6,7 @@ import Ads from "./pages/Ads";
 import Analytics from "./pages/Analytics";
 import Campaigns from "./pages/Campaigns";
 import Dashboard from "./pages/Dashboard";
+import DefenseDemo from "./pages/DefenseDemo";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 
@@ -36,6 +37,16 @@ export default function App() {
           <ProtectedRoute>
             <AppShell>
               <Dashboard />
+            </AppShell>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/defense-demo"
+        element={
+          <ProtectedRoute>
+            <AppShell>
+              <DefenseDemo />
             </AppShell>
           </ProtectedRoute>
         }

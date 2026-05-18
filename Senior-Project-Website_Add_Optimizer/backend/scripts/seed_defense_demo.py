@@ -176,6 +176,14 @@ PRODUCTS = {
     },
 }
 
+DEMO_ML_PRICES = {
+    "iphone": 129.99,
+    "macbook": 179.99,
+    "headphones": 99.99,
+    "vacuum": 159.99,
+    "shoes": 94.99,
+}
+
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for deterministic demo seeding."""
@@ -187,10 +195,13 @@ def parse_args() -> argparse.Namespace:
 
 
 def ensure_admin(email: str, password: str) -> None:
-    """Create the defense demo admin user if it does not exist."""
+    """Create or refresh the defense demo admin user."""
     with SessionLocal() as db:
         existing = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
         if existing is not None:
+            existing.password_hash = hash_password(password)
+            existing.role = "admin"
+            db.commit()
             return
         db.add(User(email=email, password_hash=hash_password(password), role="admin"))
         db.commit()
@@ -300,6 +311,11 @@ def product_metadata(product_key: str, **extra: Any) -> dict[str, Any]:
     return {**PRODUCTS[product_key], **extra}
 
 
+def ml_product_metadata(product_key: str, **extra: Any) -> dict[str, Any]:
+    """Build seeded high-intent events without turning price into an outlier cluster."""
+    return product_metadata(product_key, price=DEMO_ML_PRICES[product_key], **extra)
+
+
 def event(
     session_id: int,
     timestamp: datetime,
@@ -387,7 +403,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "electronics",
                 element="open-product",
-                metadata=product_metadata("iphone", source="category"),
+                metadata=ml_product_metadata("iphone", source="category"),
             ),
             event(
                 medium.id,
@@ -395,7 +411,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "product_view",
                 "product",
                 element="product-detail",
-                metadata=product_metadata("iphone"),
+                metadata=ml_product_metadata("iphone"),
             ),
             event(
                 medium.id,
@@ -468,7 +484,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="select-attribute",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "iphone",
                     attribute_group="storage",
                     attribute_label="Storage",
@@ -482,7 +498,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="select-attribute",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "iphone",
                     attribute_group="colors",
                     attribute_label="Color",
@@ -496,7 +512,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="add-to-cart",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "iphone",
                     selected_attributes={"storage": "512GB", "colors": "Space Black"},
                     quantity=1,
@@ -509,7 +525,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "electronics",
                 element="open-product",
-                metadata=product_metadata("macbook", source="recommended-products"),
+                metadata=ml_product_metadata("macbook", source="recommended-products"),
             ),
             event(
                 high.id,
@@ -524,7 +540,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "product_view",
                 "product",
                 element="product-detail",
-                metadata=product_metadata("macbook"),
+                metadata=ml_product_metadata("macbook"),
             ),
             event(
                 high.id,
@@ -532,7 +548,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="select-attribute",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "macbook",
                     attribute_group="storage",
                     attribute_label="Storage",
@@ -546,7 +562,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="select-attribute",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "macbook",
                     attribute_group="colors",
                     attribute_label="Color",
@@ -560,7 +576,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="add-to-cart",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "macbook",
                     selected_attributes={"storage": "1TB", "colors": "Silver"},
                     quantity=1,
@@ -573,7 +589,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "electronics",
                 element="open-product",
-                metadata=product_metadata("headphones", source="suggested-products"),
+                metadata=ml_product_metadata("headphones", source="suggested-products"),
             ),
             event(
                 high.id,
@@ -588,7 +604,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "product_view",
                 "product",
                 element="product-detail",
-                metadata=product_metadata("headphones"),
+                metadata=ml_product_metadata("headphones"),
             ),
             event(
                 high.id,
@@ -596,7 +612,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="select-attribute",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "headphones",
                     attribute_group="colors",
                     attribute_label="Color",
@@ -617,7 +633,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "home-appliances",
                 element="open-product",
-                metadata=product_metadata("vacuum", source="category"),
+                metadata=ml_product_metadata("vacuum", source="category"),
             ),
             event(
                 high.id,
@@ -632,7 +648,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "product_view",
                 "product",
                 element="product-detail",
-                metadata=product_metadata("vacuum"),
+                metadata=ml_product_metadata("vacuum"),
             ),
             event(
                 high.id,
@@ -640,7 +656,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "product",
                 element="add-to-cart",
-                metadata=product_metadata(
+                metadata=ml_product_metadata(
                     "vacuum",
                     selected_attributes={"colors": "Black", "warranty": "2 Years"},
                     quantity=1,
@@ -660,7 +676,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "click",
                 "clothing",
                 element="open-product",
-                metadata=product_metadata("shoes", source="cross-sell"),
+                metadata=ml_product_metadata("shoes", source="cross-sell"),
             ),
             event(
                 high.id,
@@ -675,7 +691,7 @@ def seed_demo_sessions() -> dict[str, int]:
                 "product_view",
                 "product",
                 element="product-detail",
-                metadata=product_metadata("shoes"),
+                metadata=ml_product_metadata("shoes"),
             ),
         ]
         high.page_count = 9

@@ -2,13 +2,13 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Event, User
+from app.models import Event, User, VisitorSession
 from app.schemas import EventCreate, EventRead
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -17,6 +17,9 @@ router = APIRouter(prefix="/events", tags=["events"])
 @router.post("/track", response_model=EventRead)
 async def track_event(payload: EventCreate, db: Session = Depends(get_db)) -> EventRead:
     """Store a new visitor event payload."""
+    if db.get(VisitorSession, payload.session_id) is None:
+        raise HTTPException(status_code=404, detail="session_not_found")
+
     data = payload.model_dump(by_alias=False)
     if data.get("timestamp") is None:
         data["timestamp"] = datetime.utcnow()

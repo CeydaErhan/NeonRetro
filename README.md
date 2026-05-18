@@ -38,7 +38,7 @@ The ML layer uses KMeans session segmentation in `backend/ml/scoring.py`. Sessio
 
 Product suggestions are served by `/recommendations/public-suggested-products`. The backend uses a trained product ranker if present, otherwise it falls back to preference-based scoring from session behavior.
 
-The React dashboard shows KPIs, recent events, campaign management, and an ML placement demo card. It is intentionally separate from the storefront so the jury can see both the visitor experience and the operator analytics console.
+The React dashboard shows KPIs, recent events, campaign management, and the defense-ready ML Decision Demo scenario player. It is intentionally separate from the storefront so the jury can see both the visitor experience and the operator analytics console.
 
 ## Run Locally With Docker Compose
 
@@ -47,6 +47,14 @@ From the repo root:
 ```bash
 docker compose -f Senior-Project-Website_Add_Optimizer/docker-compose.yml up -d --build
 ```
+
+For the defense-ready ML flow, prefer the bootstrap script:
+
+```bash
+scripts/bootstrap_defense_demo.sh
+```
+
+It starts the local stack, seeds deterministic demo data, trains `backend/ml/model.pkl`, and runs the defense checks so the main demo does not show `fallback:model_missing`.
 
 Apps:
 
@@ -113,16 +121,19 @@ Try placement:
 
 ## Senior Project Defense Story
 
-1. Open the storefront and show that it behaves like a real e-commerce site.
-2. Explain that `tracker.js` creates a backend visitor session and records behavior.
-3. Click products, attributes, and add-to-cart to show event generation.
-4. Open the dashboard and show sessions, events, impressions, clicks, and CTR.
-5. Use the seeded low, medium, and high session IDs in the ML Placement Demo card.
-6. Show that the backend returns segment, ranking strategy, features used, decision reason, and candidate count.
-7. Explain that the selected ad changes because the optimizer uses behavior-based segmentation, not a static banner.
-8. Show suggested products on the storefront as session-aware content recommendations.
+1. Run `scripts/bootstrap_defense_demo.sh` from the repo root.
+2. Open `http://localhost:5173/defense-demo` and log in with the seeded admin user.
+3. Use the ML Decision Demo scenario player as the primary defense flow.
+4. Click `Run Casual Visitor Scenario` and show `Low` with `least_exposed_ads`.
+5. Click `Run Interested Visitor Scenario` and show `Medium` with `impression_popularity`.
+6. Click `Run High Intent Visitor Scenario` and show `High` with `ctr_performance`.
+7. Explain that KMeans session segmentation changes the ad placement strategy, so the banner decision is not static.
+8. Open `http://localhost:8000` only as live tracking proof, then refresh the dashboard tracking panel after one or two storefront clicks.
+
+The printed low/medium/high session IDs are technical backup only. Do not make manual session ID entry the main defense flow.
 
 More detailed presentation steps are in `docs/DEMO_SCRIPT.md`. Manual validation steps are in `docs/TEST_PLAN.md`.
+Defense evidence and ML proof points are in `docs/DEFENSE_EVIDENCE.md`.
 
 ## Important Current Limits
 

@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import Ad, Campaign, Event, Impression, User, VisitorSession
 from app.routers.recommendations import _derive_session_ml_features, _load_model_metadata, _segment_label
 from app.schemas import AdCreate, AdPlacementRead, AdRead, AdUpdate, ImpressionClickPayload
+from ml.calibration import calibrate_business_segment
 from ml.scoring import MODEL_PATH, score_session
 
 router = APIRouter(prefix="/ads", tags=["ads"])
@@ -111,6 +112,10 @@ def _build_placement_response(
     impression_id: int | None,
     segment: int | None = None,
     segment_label: str | None = None,
+    kmeans_segment: int | None = None,
+    kmeans_segment_label: str | None = None,
+    calibration_applied: bool | None = None,
+    calibration_reason: str | None = None,
     ranking_strategy: str | None = None,
     model_version: str | None = None,
     explanation: str | None = None,
@@ -131,6 +136,10 @@ def _build_placement_response(
         impression_id=impression_id,
         segment=segment,
         segment_label=segment_label,
+        kmeans_segment=kmeans_segment,
+        kmeans_segment_label=kmeans_segment_label,
+        calibration_applied=calibration_applied,
+        calibration_reason=calibration_reason,
         ranking_strategy=ranking_strategy,
         model_version=model_version,
         explanation=explanation,
@@ -170,7 +179,9 @@ async def get_ad_placement(
                     .all()
                 )
                 features = _derive_session_ml_features(session, events)
-                segment = score_session(**features)
+                kmeans_segment = score_session(**features)
+                calibration = calibrate_business_segment(kmeans_segment, **features)
+                segment = int(calibration["final_segment"])
                 ml_stmt = _ml_placement_statement(normalized_page, segment)
                 candidate_count = _count_candidates(db, ml_stmt)
                 ml_placement = db.execute(ml_stmt).first()
@@ -179,6 +190,7 @@ async def get_ad_placement(
                     model_metadata = _load_model_metadata() or {}
                     model_version = model_metadata.get("model_version")
                     segment_label = _segment_label(segment)
+                    kmeans_segment_label = _segment_label(kmeans_segment)
                     ranking_strategy = _placement_ranking_strategy(segment)
                     impression_id = _create_impression(db, ad, session)
                     return _build_placement_response(
@@ -188,6 +200,14 @@ async def get_ad_placement(
                         impression_id=impression_id,
                         segment=segment,
                         segment_label=segment_label,
+                        kmeans_segment=kmeans_segment,
+                        kmeans_segment_label=kmeans_segment_label,
+                        calibration_applied=bool(calibration["calibration_applied"]),
+                        calibration_reason=(
+                            str(calibration["calibration_reason"])
+                            if calibration["calibration_reason"] is not None
+                            else None
+                        ),
                         ranking_strategy=ranking_strategy,
                         model_version=str(model_version) if model_version is not None else None,
                         explanation="ml:kmeans_segment_placement",

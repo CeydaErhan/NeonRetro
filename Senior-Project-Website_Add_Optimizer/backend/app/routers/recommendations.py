@@ -7,8 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-import joblib
-from sqlalchemy import func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -21,11 +20,39 @@ from app.schemas import (
     SessionProfileRead,
     SuggestedProductRead,
 )
+from ml.calibration import calibrate_business_segment
 from ml.product_ranker import PRODUCT_RANKER_PATH, rank_products_with_model
 from ml.recommendation import get_recommendations as get_segment_recommendations
-from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, SEGMENT_LABELS, score_session
+from ml.scoring import CATEGORY_SLUGS, MODEL_PATH, SEGMENT_LABELS, load_model_metadata, score_session
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
+
+DEFENSE_SCENARIOS = {
+    "casual": {
+        "label": "Casual Visitor",
+        "button_label": "Run Casual Visitor Scenario",
+        "visitor_id": "defense-demo-low",
+        "expected_segment_label": "Low",
+        "expected_strategy": "least_exposed_ads",
+        "behavior_summary": "Short browse with a single product touchpoint.",
+    },
+    "interested": {
+        "label": "Interested Visitor",
+        "button_label": "Run Interested Visitor Scenario",
+        "visitor_id": "defense-demo-medium",
+        "expected_segment_label": "Medium",
+        "expected_strategy": "impression_popularity",
+        "behavior_summary": "Category browsing with product view and attribute selection.",
+    },
+    "high-intent": {
+        "label": "High Intent Visitor",
+        "button_label": "Run High Intent Visitor Scenario",
+        "visitor_id": "defense-demo-high",
+        "expected_segment_label": "High",
+        "expected_strategy": "ctr_performance",
+        "behavior_summary": "Deep product comparison with repeated attribute choices and add-to-cart events.",
+    },
+}
 
 PRODUCTS_PATHS = []
 _rec_file = Path(__file__).resolve()
@@ -43,6 +70,108 @@ def _get_session_or_404(db: Session, session_id: int) -> VisitorSession:
     if visitor_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor session not found")
     return visitor_session
+
+
+def _model_status_payload() -> dict[str, object]:
+    """Return the model status fields used by defense demo screens."""
+    model_exists = MODEL_PATH.exists()
+    metadata = _load_model_metadata() if model_exists else None
+    return {
+        "model_exists": model_exists,
+        "model_status": "Real ML model loaded" if model_exists else "Fallback mode",
+        "model_warning": None if model_exists else "ML model is missing. Demo is in fallback mode.",
+        "model_metadata": metadata,
+    }
+
+
+def _latest_session_by_visitor_id(db: Session, visitor_id: str) -> VisitorSession | None:
+    """Return the newest deterministic defense session for a visitor id."""
+    return db.execute(
+        select(VisitorSession)
+        .where(VisitorSession.visitor_id == visitor_id)
+        .order_by(desc(VisitorSession.id))
+    ).scalar_one_or_none()
+
+
+def _ensure_defense_demo_records(db: Session) -> None:
+    """Create deterministic defense campaigns and scenario sessions when missing."""
+    missing_scenario = any(
+        _latest_session_by_visitor_id(db, scenario["visitor_id"]) is None
+        for scenario in DEFENSE_SCENARIOS.values()
+    )
+
+    from scripts.seed_defense_demo import create_campaigns_and_ads, seed_demo_sessions
+
+    create_campaigns_and_ads()
+    if missing_scenario:
+        seed_demo_sessions()
+
+
+def _scenario_payload(db: Session, scenario_key: str) -> dict[str, object]:
+    """Build a dashboard-friendly payload for one defense scenario."""
+    scenario = DEFENSE_SCENARIOS[scenario_key]
+    visitor_session = _latest_session_by_visitor_id(db, str(scenario["visitor_id"]))
+    if visitor_session is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Defense scenario was not seeded")
+
+    events = list(
+        db.execute(
+            select(Event)
+            .where(Event.session_id == visitor_session.id)
+            .order_by(Event.timestamp.asc(), Event.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    features = _derive_session_ml_features(visitor_session, events)
+    return {
+        "key": scenario_key,
+        "label": scenario["label"],
+        "button_label": scenario["button_label"],
+        "behavior_summary": scenario["behavior_summary"],
+        "expected_segment_label": scenario["expected_segment_label"],
+        "expected_strategy": scenario["expected_strategy"],
+        "session_id": visitor_session.id,
+        "visitor_id": visitor_session.visitor_id,
+        "event_count": len(events),
+        "features_used": features,
+        **_model_status_payload(),
+    }
+
+
+def _latest_live_tracking_payload(db: Session) -> dict[str, object] | None:
+    """Return the latest non-demo event so the dashboard can prove live tracking."""
+    latest_event = db.execute(
+        select(Event)
+        .join(VisitorSession, VisitorSession.id == Event.session_id)
+        .where(
+            or_(
+                VisitorSession.visitor_id.is_(None),
+                (
+                    ~VisitorSession.visitor_id.like("defense-demo%")
+                    & ~VisitorSession.visitor_id.like("ml-demo-%")
+                ),
+            )
+        )
+        .order_by(desc(Event.timestamp), desc(Event.id))
+        .limit(1)
+    ).scalars().first()
+
+    if latest_event is None:
+        return None
+
+    event_count = int(
+        db.scalar(select(func.count(Event.id)).where(Event.session_id == latest_event.session_id))
+        or 0
+    )
+    return {
+        "session_id": latest_event.session_id,
+        "event_count": event_count,
+        "latest_event_type": latest_event.type,
+        "latest_page": latest_event.page,
+        "latest_element": latest_event.element,
+        "latest_timestamp": latest_event.timestamp,
+    }
 
 
 def _load_product_events(db: Session, session_id: int) -> list[Event]:
@@ -134,28 +263,28 @@ def _ranking_strategy(segment: int) -> str:
 
 def _load_model_metadata() -> dict[str, object] | None:
     """Read safe metadata from the persisted KMeans artifact when available."""
-    if not MODEL_PATH.exists():
-        return None
-    try:
-        payload = joblib.load(MODEL_PATH)
-    except Exception:
-        return None
-
-    metadata = payload.get("metadata")
+    metadata = load_model_metadata()
     if not isinstance(metadata, dict):
         return None
 
     safe_keys = {
+        "algorithm",
         "model_type",
         "model_version",
         "trained_at",
         "training_source",
         "training_session_count",
+        "training_session_count_note",
+        "feature_count",
         "feature_names",
         "random_state",
         "n_clusters",
+        "scaler",
         "scaler_type",
+        "silhouette_score",
+        "silhouette_score_note",
         "segment_labels",
+        "segment_strategy_mapping",
     }
     return {key: value for key, value in metadata.items() if key in safe_keys}
 
@@ -391,6 +520,24 @@ def _build_suggested_products(
 ) -> list[SuggestedProductRead]:
     """Rank catalog products for one visitor session using attribute-aware preferences."""
     profile = _derive_session_preference_profile(session_id, events)
+    seen_product_ids = {
+        metadata.get("product_id")
+        for event in events
+        for metadata in [event.metadata_json or {}]
+        if isinstance(metadata.get("product_id"), int)
+    }
+
+    if (
+        profile.top_category is None
+        and profile.average_price is None
+        and not profile.preferred_brands
+        and not profile.preferred_colors
+        and not profile.preferred_sizes
+        and not profile.preferred_storage
+        and not profile.preferred_skin_types
+    ):
+        return _stable_popular_product_suggestions(limit, exclude_viewed, seen_product_ids)
+
     if PRODUCT_RANKER_PATH.exists():
         model_ranked = rank_products_with_model(events, limit=limit, exclude_viewed=exclude_viewed)
         suggestions: list[SuggestedProductRead] = []
@@ -428,13 +575,6 @@ def _build_suggested_products(
         if suggestions:
             return suggestions
 
-    seen_product_ids = {
-        metadata.get("product_id")
-        for event in events
-        for metadata in [event.metadata_json or {}]
-        if isinstance(metadata.get("product_id"), int)
-    }
-
     ranked_products: list[SuggestedProductRead] = []
     for product in _load_products_catalog():
         suggestion = _score_catalog_product(product, profile, seen_product_ids, exclude_viewed)
@@ -442,7 +582,62 @@ def _build_suggested_products(
             ranked_products.append(suggestion)
 
     ranked_products.sort(key=lambda item: (-item.score, item.price, item.name))
-    return ranked_products[:limit]
+    if ranked_products:
+        return ranked_products[:limit]
+    return _stable_popular_product_suggestions(limit, exclude_viewed, seen_product_ids)
+
+
+def _stable_popular_product_suggestions(
+    limit: int,
+    exclude_viewed: bool,
+    seen_product_ids: set[int],
+) -> list[SuggestedProductRead]:
+    """Return deterministic popular products when a session has no product signals yet."""
+    suggestions: list[SuggestedProductRead] = []
+    products = sorted(
+        _load_products_catalog(),
+        key=lambda product: (
+            -float(product.get("salesCount") or 0),
+            -float(product.get("rating") or 0),
+            str(product.get("name") or ""),
+        ),
+    )
+
+    for product in products:
+        product_id = product.get("id")
+        category = product.get("category")
+        category_name = product.get("categoryName")
+        name = product.get("name")
+        price = product.get("price")
+        image = product.get("image")
+        if exclude_viewed and isinstance(product_id, int) and product_id in seen_product_ids:
+            continue
+        if not all(
+            [
+                isinstance(product_id, int),
+                isinstance(category, str),
+                isinstance(category_name, str),
+                isinstance(name, str),
+                isinstance(price, (int, float)),
+                isinstance(image, str),
+            ]
+        ):
+            continue
+        suggestions.append(
+            SuggestedProductRead(
+                product_id=product_id,
+                name=name,
+                category=category,
+                category_name=category_name,
+                price=float(price),
+                image=image,
+                score=0.0,
+                matched_signals=["popular:fallback"],
+            )
+        )
+        if len(suggestions) >= limit:
+            break
+    return suggestions
 
 
 @router.get("")
@@ -459,8 +654,11 @@ async def list_recommendations(
         .all()
     )
     features = _derive_session_ml_features(visitor_session, events)
-    segment = score_session(**features)
+    kmeans_segment = score_session(**features)
+    calibration = calibrate_business_segment(kmeans_segment, **features)
+    segment = int(calibration["final_segment"])
     segment_label = _segment_label(segment)
+    kmeans_segment_label = _segment_label(kmeans_segment)
     ranking_strategy = _ranking_strategy(segment)
     model_metadata = _load_model_metadata()
 
@@ -475,12 +673,49 @@ async def list_recommendations(
             "target_page": ad.target_page,
             "segment": segment,
             "segment_label": segment_label,
+            "kmeans_segment": kmeans_segment,
+            "kmeans_segment_label": kmeans_segment_label,
+            "calibration_applied": bool(calibration["calibration_applied"]),
+            "calibration_reason": calibration["calibration_reason"],
             "ranking_strategy": ranking_strategy,
             "features_used": features,
             "model_metadata": model_metadata,
         }
         for ad in recommended_ads
     ]
+
+
+@router.get("/defense-demo/status")
+async def defense_demo_status(
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Return model, scenario, and live tracking status for the defense dashboard."""
+    scenario_sessions = {
+        key: _scenario_payload(db, key)
+        for key, scenario in DEFENSE_SCENARIOS.items()
+        if _latest_session_by_visitor_id(db, str(scenario["visitor_id"])) is not None
+    }
+    return {
+        **_model_status_payload(),
+        "scenarios": scenario_sessions,
+        "live_tracking": _latest_live_tracking_payload(db),
+        "strategy_note": "/ads/placement uses least_exposed_ads for low engagement; /recommendations labels low as newest_ads.",
+    }
+
+
+@router.post("/defense-demo/scenarios/{scenario_key}")
+async def run_defense_demo_scenario(
+    scenario_key: str,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, object]:
+    """Create or reuse a deterministic defense session and return its feature payload."""
+    if scenario_key not in DEFENSE_SCENARIOS:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown defense scenario")
+
+    _ensure_defense_demo_records(db)
+    return _scenario_payload(db, scenario_key)
 
 
 @router.get("/recently-viewed", response_model=list[SessionProductInteractionRead])
